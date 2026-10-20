@@ -531,9 +531,10 @@ function cartaoHTML(it) {
   const local = [it.unidade, [it.municipio, it.uf].filter(Boolean).join("/")].filter(Boolean).join(", ");
   const valor = (typeof it.valor === "number") ? moeda.format(it.valor) : "não informado";
   const lPncp = urlSegura(it.link_pncp), lOrig = urlSegura(it.link_origem);
+  const fonte = it.fonte || "PNCP (pncp.gov.br)";
   const links = (lPncp ? `<a class="edital" href="${esc(lPncp)}" target="_blank" rel="noopener">Abrir edital no PNCP</a>` : "") +
-    (lOrig ? `<a href="${esc(lOrig)}" target="_blank" rel="noopener">Sistema do órgão</a>` : "") +
-    (lPncp || lOrig ? `<span class="fonte">Fonte: PNCP (pncp.gov.br)</span>` : `<span class="fonte">Sem link disponível</span>`);
+    (lOrig ? (lPncp ? `<a href="${esc(lOrig)}" target="_blank" rel="noopener">Sistema do órgão</a>` : `<a class="edital" href="${esc(lOrig)}" target="_blank" rel="noopener">Abrir edital no site do órgão</a>`) : "") +
+    (lPncp || lOrig ? `<span class="fonte">Fonte: ${esc(fonte)}</span>` : `<span class="fonte">Sem link disponível</span>`);
   const nova = ehNova(it);
   return `<article class="cartao ${nova ? "nova" : ""}" data-id="${esc(it.id)}">
     <div class="c-prazo ${cls}">${nova ? '<span class="sr">Nova. </span>' : ""}<span class="data">${data}</span><span class="hora">${hora ? "até " + hora : ""}</span><span class="falta">${falta}</span></div>
