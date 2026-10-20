@@ -18,7 +18,7 @@
     --ok: #2B7A4B;
     --link: #1F5FA8;
     --foco: #1F5FA8;
-    --mapa-vazio: #D5DADD;
+    --mapa-vazio: #D3E2F3;
     --fonte: "Bahnschrift", "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
   }
   @media (prefers-color-scheme: dark) {
@@ -33,7 +33,7 @@
       --ok: #5DB988;
       --link: #7FB2EE;
       --foco: #7FB2EE;
-      --mapa-vazio: #36424A;
+      --mapa-vazio: #2D4259;
     }
   }
   * { box-sizing: border-box; }
@@ -100,6 +100,12 @@
   .mapa-leg { display: flex; align-items: center; gap: 0.5rem; font-size: 0.75rem; color: var(--tinta-2); margin: 0.125rem 0.25rem 0.25rem; }
   .mapa-leg i { display: inline-block; width: 5.625rem; height: 0.5rem; background: linear-gradient(90deg, rgba(31,95,168,.15), #1F5FA8); border: 1px solid var(--linha); }
   @media (max-width: 860px) { .hero { grid-template-columns: 1fr; } }
+  /* Duas vistas: início (apresentação + mapa) e lista (régua, filtros, licitações) */
+  #vistaLista { display: none; }
+  body.em-painel #vistaLista { display: block; }
+  body.em-painel .hero { display: none; }
+  .voltar { background: transparent; border: 1px solid var(--linha); color: var(--link); padding: 0.4rem 0.9rem; border-radius: 3px; cursor: pointer; font-weight: 600; margin: 0 0 0.9rem; }
+  .voltar:hover { background: var(--painel); }
   /* Painel do órgão */
   .painel-cab { background: var(--painel); border: 1px solid var(--linha); border-left: 4px solid #1F5FA8; padding: 0.75rem 1rem; margin-bottom: 0.625rem; display: flex; flex-wrap: wrap; gap: 0.375rem 1rem; align-items: center; }
   .painel-cab h2 { margin: 0; font-size: 1.125rem; }
@@ -261,6 +267,8 @@
   </section>
   <div class="aviso-dados" id="avisoDados" hidden></div>
 
+  <div id="vistaLista">
+  <button class="voltar" type="button" id="btnVoltar">← Voltar ao mapa</button>
   <section class="regua-bloco" aria-labelledby="tituloRegua">
     <h2 id="tituloRegua">Encerramentos nos próximos 30 dias</h2>
     <p>Cada coluna é um dia. Clique em um dia para listar só o que encerra nele.</p>
@@ -281,6 +289,7 @@
 
   <div class="resumo" id="resumo"></div>
   <div id="lista"></div>
+  </div>
 <p style="font-size:12px;color:var(--tinta-2);margin-top:28px">Mapa: @svg-maps/brazil, licença CC BY 4.0.</p>
 </main>
 
@@ -336,7 +345,7 @@ function orgaoDe(it) {
   }
   it._org = achou; return achou;
 }
-const F = { painelUf: false, orgao: null, busca: "", uf: "", mod: "", relevantes: true, ocultarEncerradas: true, rodoviarios: false, novas: false, dia: null, limite: 100 };
+const F = { todos: false, painelUf: false, orgao: null, busca: "", uf: "", mod: "", relevantes: true, ocultarEncerradas: true, rodoviarios: false, novas: false, dia: null, limite: 100 };
 let DADOS = { itens: [], gerado_em: null, consultas: 0, consultas_com_erro: 0 };
 let VISITA_ANTERIOR = null;   // quando você abriu o Radar da vez anterior (só neste navegador)
 
@@ -484,13 +493,15 @@ function renderOrgaos() {
   const cont = {};
   base.forEach(it => { const k = orgaoDe(it); cont[k] = (cont[k] || 0) + 1; });
   const lista = ORGAOS.concat([ORGAO_OUTROS]);
-  $("orgaos").innerHTML = `<button type="button" data-org="" aria-pressed="${!F.orgao}">Todos<span class="q">${base.length}</span></button>` +
+  $("orgaos").innerHTML = `<button type="button" data-org="" aria-pressed="${F.todos}">Todos<span class="q">${base.length}</span></button>` +
     lista.map(o => `<button type="button" data-org="${o.id}" class="${cont[o.id] ? "" : "zero"}" aria-pressed="${F.orgao === o.id}" title="${esc(o.desc)}">${esc(o.nome)}<span class="q">${cont[o.id] || 0}</span></button>`).join("");
 }
 
 function painelCab(lista) {
   let titulo, desc, sites = [];
-  if (F.orgao) {
+  if (F.todos) {
+    titulo = "Todas as licitações"; desc = "Todos os órgãos e estados";
+  } else if (F.orgao) {
     const o = ORGAOS.concat([ORGAO_OUTROS]).find(x => x.id === F.orgao) || ORGAO_OUTROS;
     titulo = o.nome; desc = o.desc; sites = (o.sites || []).filter(x => urlSegura(x.u));
   } else {
@@ -499,7 +510,7 @@ function painelCab(lista) {
   }
   return `<div class="painel-cab"><h2>${esc(titulo)}</h2><span class="sub">${esc(desc)}. ${lista.length} licitação(ões) com os filtros atuais.</span>` +
     sites.map(x => `<a href="${esc(x.u)}" target="_blank" rel="noopener">${esc(x.t)}</a>`).join("") +
-    `<button class="btn" type="button" id="btnFechar">Fechar painel</button></div>`;
+    `</div>`;
 }
 
 function cartaoHTML(it) {
@@ -539,6 +550,7 @@ function renderResumo(lista) {
 }
 
 function render() {
+  document.body.classList.toggle("em-painel", !!(F.orgao || F.painelUf || F.todos));
   renderMapa();
   renderNumeros();
   renderOrgaos();
@@ -550,7 +562,7 @@ function render() {
     alvo.innerHTML = `<div class="vazio">A primeira coleta ainda não terminou. No GitHub, abra <strong>Actions &gt; Coletar licitações &gt; Run workflow</strong> para coletar agora; leva alguns minutos.</div>`;
     return;
   }
-  const painel = !!(F.orgao || F.painelUf);
+  const painel = !!(F.orgao || F.painelUf || F.todos);
   if (!lista.length) {
     alvo.innerHTML = (painel ? painelCab(lista) : "") + `<div class="vazio">Nenhuma licitação com estes filtros. Desmarque “Só relevantes” ou limpe a busca para ampliar.</div>`;
     return;
@@ -621,14 +633,19 @@ function ligarEventos() {
   });
   $("orgaos").addEventListener("click", e => {
     const b = e.target.closest("button"); if (!b) return;
-    F.orgao = b.dataset.org || null; F.uf = ""; F.painelUf = false; $("fUf").value = ""; F.dia = null; F.limite = 100; salvarFiltros(); render();
+    F.orgao = b.dataset.org || null; F.todos = !b.dataset.org; F.uf = ""; F.painelUf = false; $("fUf").value = ""; F.dia = null; F.limite = 100; salvarFiltros(); render(); window.scrollTo({ top: 0 });
   });
+  const voltarAoMapa = () => {
+    F.orgao = null; F.todos = false; F.dia = null;
+    if (F.painelUf) { F.uf = ""; F.painelUf = false; $("fUf").value = ""; }
+    render(); window.scrollTo({ top: 0 });
+  };
+  $("btnVoltar").addEventListener("click", voltarAoMapa);
   const abrirUf = el => {
     const uf = el.dataset.uf; if (!uf) return;
-    if (F.painelUf && F.uf === uf) { F.uf = ""; F.painelUf = false; }
-    else { F.uf = uf; F.painelUf = true; F.orgao = null; }
+    F.uf = uf; F.painelUf = true; F.orgao = null; F.todos = false;
     $("fUf").value = F.uf; F.dia = null; F.limite = 100; render();
-    if (F.painelUf) $("lista").scrollIntoView({ behavior: "smooth", block: "start" });
+    window.scrollTo({ top: 0 });
   };
   $("mapa").addEventListener("click", e => { const el = e.target.closest(".uf"); if (el) abrirUf(el); });
   $("mapa").addEventListener("keydown", e => { if (e.key !== "Enter" && e.key !== " ") return; const el = e.target.closest(".uf"); if (el) { e.preventDefault(); abrirUf(el); } });
@@ -642,7 +659,7 @@ function ligarEventos() {
   });
   $("lista").addEventListener("click", e => {
     if (e.target.id === "btnMais") { F.limite += 100; render(); return; }
-    if (e.target.id === "btnFechar") { F.orgao = null; if (F.painelUf) { F.uf = ""; F.painelUf = false; $("fUf").value = ""; } render(); return; }
+    if (e.target.id === "btnFechar") { voltarAoMapa(); return; }
     const obj = e.target.closest(".c-objeto");
     if (obj) { obj.closest(".cartao").classList.toggle("aberta"); return; }
     const texto = e.target.closest(".texto");
