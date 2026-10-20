@@ -149,6 +149,12 @@
     td.links a { display: inline; margin-right: 12px; }
   }
   @media (prefers-reduced-motion: reduce) { .progresso { transition: none; } }
+
+  .topo .estado a { color: inherit; }
+  .topo .link { color: var(--asfalto-texto); font-size: 13px; }
+  .aviso-dados { background: #FFF3CD; color: #4D3B00; border: 1px solid #E5C65A; padding: 10px 14px; margin-bottom: 14px; }
+  @media (prefers-color-scheme: dark) { .aviso-dados { background: #3A3210; color: #F5E7A6; border-color: #7A6A20; } }
+  .aviso-dados[hidden] { display: none; }
 </style>
 </head>
 <body>
@@ -157,12 +163,13 @@
   <div class="topo-in">
     <h1>Radar de licitações</h1>
     <div class="estado" id="estado" role="status" aria-live="polite">Carregando…</div>
-    <button class="btn" id="btnAtualizar" type="button">Atualizar agora</button>
+    <a class="link" id="linkColetas" href="https://github.com/rafaelmunizcivil-sudo/comercial-consol/actions/workflows/coletar.yml" target="_blank" rel="noopener">Ver coletas</a>
   </div>
-  <div class="progresso" id="progresso"></div>
 </header>
 
 <main>
+  <div class="aviso-dados" id="avisoDados" hidden></div>
+
   <section class="regua-bloco" aria-labelledby="tituloRegua">
     <h2 id="tituloRegua">Encerramentos nos próximos 30 dias</h2>
     <p>Cada coluna é um dia. Clique em um dia para listar só o que encerra nele.</p>
@@ -173,19 +180,11 @@
     <input type="search" id="fBusca" placeholder="Buscar por objeto, órgão ou cidade" aria-label="Buscar">
     <select id="fUf" aria-label="Estado"><option value="">Todos os estados</option></select>
     <select id="fMod" aria-label="Modalidade"><option value="">Todas as modalidades</option></select>
-    <select id="fSit" aria-label="Acompanhamento">
-      <option value="">Qualquer acompanhamento</option>
-      <option value="novas">Só novas</option>
-      <option value="__sem">Sem marcação</option>
-      <option value="analisando">Em análise</option>
-      <option value="participando">Participando</option>
-      <option value="descartada">Descartadas</option>
-    </select>
     <div class="opcoes">
       <label><input type="checkbox" id="fRelevantes" checked> Só relevantes</label>
       <label><input type="checkbox" id="fEncerradas" checked> Ocultar encerradas</label>
-      <label><input type="checkbox" id="fDescartadas" checked> Ocultar descartadas</label>
       <label><input type="checkbox" id="fRodoviarios"> Só órgãos rodoviários</label>
+      <label><input type="checkbox" id="fNovas"> Só novas</label>
     </div>
   </section>
 
@@ -193,30 +192,21 @@
   <div id="lista"></div>
 </main>
 
-<div class="aviso" id="aviso" hidden role="alert"></div>
-
-<div class="entrada" id="entrada" hidden>
-  <form id="formEntrada">
-    <h2>Radar de licitações</h2>
-    <p>Digite o código de acesso do time. Você só precisa fazer isso uma vez neste navegador.</p>
-    <label class="sr" for="entradaCodigo">Código de acesso</label>
-    <input type="password" id="entradaCodigo" autocomplete="current-password" placeholder="Código de acesso">
-    <div class="msg" id="entradaMsg" role="alert"></div>
-    <button type="submit">Entrar</button>
-  </form>
-</div>
-
 <script>
 "use strict";
-const SITUACOES = [["", "Sem marcação"], ["analisando", "Em análise"], ["participando", "Participando"], ["descartada", "Descartada"]];
-const F = { busca: "", uf: "", mod: "", sit: "", relevantes: true, ocultarEncerradas: true, ocultarDescartadas: true, rodoviarios: false, dia: null, limite: 100 };
-let DADOS = { itens: [], status: { itens: {}, visto_ate: null }, meta: {}, ufs: [] };
-let timer = null;
-let avisoTimer = null;
+// De onde vem a lista. A primeira tenta o arquivo direto do repositório (sempre o mais novo);
+// a segunda, o arquivo publicado junto com esta página.
+const FONTES = [
+  "https://raw.githubusercontent.com/rafaelmunizcivil-sudo/comercial-consol/main/licitacoes.json",
+  "licitacoes.json",
+];
+const F = { busca: "", uf: "", mod: "", relevantes: true, ocultarEncerradas: true, rodoviarios: false, novas: false, dia: null, limite: 100 };
+let DADOS = { itens: [], gerado_em: null, consultas: 0, consultas_com_erro: 0 };
+let VISITA_ANTERIOR = null;   // quando você abriu o Radar da vez anterior (só neste navegador)
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-const norm = s => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+const norm = s => String(s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 const urlSegura = u => /^https?:\/\//i.test(u || "") ? u : "";
 const dois = n => String(n).padStart(2, "0");
 const inicioDia = d => new Date(d.getFullYear(), d.getMonth(), d.getDate());
@@ -226,68 +216,20 @@ const fmtHora = d => dois(d.getHours()) + "h" + dois(d.getMinutes());
 const diasAte = d => Math.round((inicioDia(d) - inicioDia(new Date())) / 86400000);
 const moeda = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 
-function aviso(texto) {
-  const el = $("aviso");
-  el.textContent = texto; el.hidden = false;
-  clearTimeout(avisoTimer);
-  avisoTimer = setTimeout(() => { el.hidden = true; }, 6000);
-}
-
-const CHAVE_CODIGO = "radar-codigo";
-function lerCodigo() { try { return localStorage.getItem(CHAVE_CODIGO) || ""; } catch (e) { return ""; } }
-function guardarCodigo(c) { try { localStorage.setItem(CHAVE_CODIGO, c); } catch (e) { /* sem armazenamento */ } }
-
-// Endereço do Radar no Google (termina em /exec). Vazio = a página está sendo servida pelo próprio Google.
-const URL_API = "https://script.google.com/macros/s/AKfycbw4NdX4IPNhUGg434w7rBiiFxipSpwGAvlXqsRkppCNEE8rxaGBnjyExOX77xdELy0r/exec";
-
-function tratarResposta(r) {
-  if (r && r.erro === "codigo") { pedirCodigo(r.mensagem); throw new Error("codigo"); }
-  if (r && r.erro) throw new Error(r.erro);
-  return r;
-}
-
-// Fala com o Radar. Mesmas rotas nos dois modos: dentro do Google (google.script.run)
-// ou hospedado em outro lugar, como o GitHub Pages (fetch no endereço /exec).
-function chamar(rota, corpo) {
-  if (window.google && google.script && google.script.run) {
-    return new Promise((resolve, reject) => {
-      google.script.run
-        .withSuccessHandler(r => { try { resolve(tratarResposta(r)); } catch (e) { reject(e); } })
-        .withFailureHandler(e => reject(new Error(String((e && e.message) || e))))
-        .api(rota, corpo || {}, lerCodigo());
-    });
-  }
-  if (!URL_API) return Promise.reject(new Error("fora do Google"));
-  return fetch(URL_API, {
-    method: "POST",
-    headers: { "Content-Type": "text/plain;charset=utf-8" },   // evita a checagem prévia (CORS)
-    body: JSON.stringify({ rota: rota, corpo: corpo || {}, codigo: lerCodigo() }),
-  }).then(r => { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); }).then(tratarResposta);
-}
-
-let pedindoCodigo = false;
-function pedirCodigo(mensagem) {
-  $("entradaMsg").textContent = mensagem || "";
-  $("entrada").hidden = false;
-  if (!pedindoCodigo) { pedindoCodigo = true; $("entradaCodigo").focus(); }
-  $("estado").textContent = "Digite o código de acesso";
-}
-
 function salvarFiltros() {
-  try { localStorage.setItem("radar-filtros", JSON.stringify({ relevantes: F.relevantes, ocultarEncerradas: F.ocultarEncerradas, ocultarDescartadas: F.ocultarDescartadas, rodoviarios: F.rodoviarios, uf: F.uf, mod: F.mod })); } catch (e) { /* sem armazenamento */ }
+  try { localStorage.setItem("radar-filtros", JSON.stringify({ relevantes: F.relevantes, ocultarEncerradas: F.ocultarEncerradas, rodoviarios: F.rodoviarios, uf: F.uf, mod: F.mod })); } catch (e) { /* sem armazenamento */ }
 }
 function lerFiltros() {
-  try {
-    const s = JSON.parse(localStorage.getItem("radar-filtros") || "null");
-    if (s) Object.assign(F, s);
-  } catch (e) { /* ignora */ }
+  try { const s = JSON.parse(localStorage.getItem("radar-filtros") || "null"); if (s) Object.assign(F, s); } catch (e) { /* ignora */ }
+  try { VISITA_ANTERIOR = localStorage.getItem("radar-visita") || null; } catch (e) { VISITA_ANTERIOR = null; }
+}
+function marcarVisita() {
+  const agora = new Date(); const t = agora.getFullYear() + "-" + dois(agora.getMonth() + 1) + "-" + dois(agora.getDate()) + "T" + dois(agora.getHours()) + ":" + dois(agora.getMinutes()) + ":" + dois(agora.getSeconds());
+  try { localStorage.setItem("radar-visita", t); } catch (e) { /* sem armazenamento */ }
+  VISITA_ANTERIOR = t;
 }
 
-function ehNova(it) {
-  const visto = DADOS.status.visto_ate;
-  return !!visto && it.primeira_vez > visto;
-}
-function marcacao(it) { return DADOS.status.itens[it.id] || {}; }
+const ehNova = it => !!VISITA_ANTERIOR && !!it.primeira_vez && it.primeira_vez > VISITA_ANTERIOR;
 
 function filtrar(ignorarDia) {
   const agora = new Date();
@@ -297,11 +239,7 @@ function filtrar(ignorarDia) {
     if (F.rodoviarios && !it.rodoviario) return false;
     if (F.uf && it.uf !== F.uf) return false;
     if (F.mod && it.modalidade !== F.mod) return false;
-    const st = marcacao(it).situacao || "";
-    if (F.ocultarDescartadas && st === "descartada") return false;
-    if (F.sit === "novas") { if (!ehNova(it)) return false; }
-    else if (F.sit === "__sem") { if (st) return false; }
-    else if (F.sit && st !== F.sit) return false;
+    if (F.novas && !ehNova(it)) return false;
     const enc = it.encerramento ? new Date(it.encerramento) : null;
     if (F.ocultarEncerradas && enc && enc < agora) return false;
     if (!ignorarDia && F.dia && (!enc || chaveDia(enc) !== F.dia)) return false;
@@ -346,7 +284,6 @@ function renderRegua() {
 }
 
 function linhaHTML(it) {
-  const m = marcacao(it);
   const enc = it.encerramento ? new Date(it.encerramento) : null;
   let classePrazo = "", falta = "sem prazo informado", data = "—", hora = "";
   if (enc) {
@@ -359,18 +296,14 @@ function linhaHTML(it) {
   }
   const local = [it.unidade, [it.municipio, it.uf].filter(Boolean).join("/")].filter(Boolean).join(", ");
   const valor = (typeof it.valor === "number") ? moeda.format(it.valor) : '<span class="sem">não informado</span>';
-  const opcoes = SITUACOES.map(([v, t]) => `<option value="${v}"${(m.situacao || "") === v ? " selected" : ""}>${t}</option>`).join("");
   const lPncp = urlSegura(it.link_pncp), lOrig = urlSegura(it.link_origem);
   const nova = ehNova(it);
-  return `<tr data-id="${esc(it.id)}" class="${nova ? "nova" : ""} ${m.situacao === "descartada" ? "descartada" : ""}">
+  return `<tr data-id="${esc(it.id)}" class="${nova ? "nova" : ""}">
     <td class="prazo ${classePrazo}">${nova ? '<span class="sr">Nova. </span>' : ""}<span class="data">${data}</span><span class="hora">${hora}</span><span class="falta">${falta}</span></td>
     <td class="orgao"><strong>${esc(it.orgao)}</strong><span>${esc(local)}</span></td>
-    <td class="objeto"><div class="texto" title="Clique para ver o texto completo e anotar">${esc(it.objeto)}</div>
-      <span class="mod">${esc(it.modalidade)} ${esc(it.numero)}${it.ano ? "/" + esc(it.ano) : ""}${it.situacao ? ", " + esc(it.situacao) : ""}</span>
-      <div class="obs"><label class="sr" for="obs-${esc(it.id)}">Observação</label><textarea id="obs-${esc(it.id)}" data-campo="obs" placeholder="Observação sobre esta licitação">${esc(m.obs || "")}</textarea></div></td>
+    <td class="objeto"><div class="texto" title="Clique para ver o texto completo">${esc(it.objeto)}</div>
+      <span class="mod">${esc(it.modalidade)} ${esc(it.numero)}${it.ano ? "/" + esc(it.ano) : ""}${it.situacao ? ", " + esc(it.situacao) : ""}</span></td>
     <td class="num valor">${valor}</td>
-    <td class="acomp"><select data-campo="situacao" class="st-${esc(m.situacao || "")}" aria-label="Acompanhamento">${opcoes}</select>
-      <input type="text" data-campo="responsavel" value="${esc(m.responsavel || "")}" placeholder="Responsável" aria-label="Responsável" maxlength="80"></td>
     <td class="links">${lPncp ? `<a href="${esc(lPncp)}" target="_blank" rel="noopener">Edital no PNCP</a>` : ""}${lOrig ? `<a href="${esc(lOrig)}" target="_blank" rel="noopener">Sistema do órgão</a>` : ""}</td>
   </tr>`;
 }
@@ -378,9 +311,9 @@ function linhaHTML(it) {
 function renderResumo(lista) {
   const novas = DADOS.itens.filter(ehNova).length;
   const agora = new Date();
-  const sete = lista.filter(it => { if (!it.encerramento) return false; const e = new Date(it.encerramento); const d = diasAte(e); return e >= agora && d <= 7; }).length;
+  const sete = lista.filter(it => { if (!it.encerramento) return false; const e = new Date(it.encerramento); return e >= agora && diasAte(e) <= 7; }).length;
   let html = `<span><strong>${lista.length}</strong> na lista</span><span><strong>${sete}</strong> encerram em até 7 dias</span>`;
-  html += `<span class="legenda"><strong>${novas}</strong> novas desde a última marcação</span>`;
+  html += `<span class="legenda"><strong>${novas}</strong> novas desde a sua última visita</span>`;
   if (F.dia) html += `<button class="btn" type="button" id="btnLimparDia">Limpar filtro de dia</button>`;
   else if (novas) html += `<button class="btn" type="button" id="btnVisto">Marcar novas como vistas</button>`;
   $("resumo").innerHTML = html;
@@ -392,7 +325,7 @@ function render() {
   renderResumo(lista);
   const alvo = $("lista");
   if (!DADOS.itens.length) {
-    alvo.innerHTML = `<div class="vazio">Nenhuma licitação coletada ainda. A primeira coleta leva alguns minutos; acompanhe o andamento no topo da página.</div>`;
+    alvo.innerHTML = `<div class="vazio">A primeira coleta ainda não terminou. No GitHub, abra <strong>Actions &gt; Coletar licitações &gt; Run workflow</strong> para coletar agora; leva alguns minutos.</div>`;
     return;
   }
   if (!lista.length) {
@@ -401,161 +334,97 @@ function render() {
   }
   const parte = lista.slice(0, F.limite);
   const abertas = new Set([...document.querySelectorAll("tr.aberta")].map(tr => tr.dataset.id));
-  alvo.innerHTML = `<table><thead><tr><th>Prazo</th><th>Órgão</th><th>Objeto</th><th class="num">Valor estimado</th><th>Acompanhamento</th><th>Links</th></tr></thead><tbody>${parte.map(linhaHTML).join("")}</tbody></table>` +
+  alvo.innerHTML = `<table><thead><tr><th>Prazo</th><th>Órgão</th><th>Objeto</th><th class="num">Valor estimado</th><th>Links</th></tr></thead><tbody>${parte.map(linhaHTML).join("")}</tbody></table>` +
     (lista.length > parte.length ? `<button class="mais" type="button" id="btnMais">Mostrar mais ${Math.min(100, lista.length - parte.length)} de ${lista.length - parte.length} restantes</button>` : "");
   alvo.querySelectorAll("tbody tr").forEach(tr => { if (abertas.has(tr.dataset.id)) tr.classList.add("aberta"); });
 }
 
 function preencherSelects() {
-  const ufs = [...new Set([...(DADOS.ufs || []), ...DADOS.itens.map(i => i.uf)].filter(Boolean))].sort();
+  const ufs = [...new Set(DADOS.itens.map(i => i.uf).filter(Boolean))].sort();
   const mods = [...new Set(DADOS.itens.map(i => i.modalidade).filter(Boolean))].sort();
   $("fUf").innerHTML = `<option value="">Todos os estados</option>` + ufs.map(u => `<option value="${esc(u)}">${esc(u)}</option>`).join("");
   $("fMod").innerHTML = `<option value="">Todas as modalidades</option>` + mods.map(u => `<option value="${esc(u)}">${esc(u)}</option>`).join("");
   $("fUf").value = F.uf; $("fMod").value = F.mod;
 }
 
-function textoEstado(p) {
-  const el = $("estado");
-  el.classList.remove("erro");
-  if (p && p.rodando) {
-    el.textContent = p.feitos ? "Consultando o PNCP: " + p.feitos + " de " + p.total : "Preparando a coleta (pode levar 1 minuto)…";
-  } else if (p && p.falhou_tudo) {
-    el.classList.add("erro");
-    el.textContent = p.mensagem || "Não foi possível consultar o PNCP.";
-  } else if (DADOS.meta && DADOS.meta.ultima_coleta) {
-    const d = new Date(DADOS.meta.ultima_coleta);
-    let t = "Atualizado em " + fmtData(d) + " às " + fmtHora(d);
-    if (DADOS.meta.consultas_com_erro) t += ". " + DADOS.meta.consultas_com_erro + " consultas falharam; atualize de novo.";
-    el.textContent = t;
-  } else {
-    el.textContent = "Ainda sem coleta";
+function textoEstado() {
+  const el = $("estado"), av = $("avisoDados");
+  el.classList.remove("erro"); av.hidden = true;
+  if (!DADOS.gerado_em) { el.textContent = "Ainda sem coleta"; return; }
+  const d = new Date(DADOS.gerado_em);
+  el.textContent = "Atualizado em " + fmtData(d) + " às " + fmtHora(d);
+  const horas = (Date.now() - d.getTime()) / 3600000;
+  if (horas > 30) {
+    av.hidden = false;
+    av.textContent = "Atenção: a lista tem mais de um dia (" + Math.floor(horas / 24) + " dia(s)). A coleta automática pode ter falhado. Veja em “Ver coletas” (canto superior direito).";
+  } else if (DADOS.consultas_com_erro) {
+    el.textContent += ". " + DADOS.consultas_com_erro + " consulta(s) falharam nesta coleta.";
   }
 }
 
+async function buscarDados() {
+  let ultimoErro = null;
+  for (const base of FONTES) {
+    try {
+      const r = await fetch(base + (base.includes("?") ? "&" : "?") + "t=" + Date.now(), { cache: "no-store" });
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      return await r.json();
+    } catch (e) { ultimoErro = e; }
+  }
+  throw ultimoErro;
+}
+
 async function carregar() {
-  DADOS = await chamar("/api/dados");
+  const d = await buscarDados();
+  const itens = Array.isArray(d.itens) ? d.itens : Object.values(d.itens || {});
+  DADOS = { itens: itens, gerado_em: d.gerado_em || null, consultas: d.consultas || 0, consultas_com_erro: d.consultas_com_erro || 0 };
   preencherSelects();
+  textoEstado();
   render();
 }
 
-function pintarProgresso(p) {
-  const barra = $("progresso");
-  barra.style.width = (p && p.rodando && p.total) ? Math.round(p.feitos / p.total * 100) + "%" : "0";
-  $("btnAtualizar").disabled = !!(p && p.rodando);
-}
-
-async function acompanhar() {
-  clearTimeout(timer);
-  let p;
-  try { p = await chamar("/api/progresso"); }
-  catch (e) { $("estado").textContent = "Não foi possível falar com o Radar. Recarregue a página."; $("estado").classList.add("erro"); return; }
-  pintarProgresso(p);
-  textoEstado(p);
-  if (p.rodando) { timer = setTimeout(acompanhar, 5000); return; }
-  if (p.fim) { await carregar(); textoEstado(p); }
-}
-
-async function atualizar(forcar) {
-  try {
-    await chamar("/api/atualizar", { forcar: !!forcar });
-    acompanhar();
-  } catch (e) { aviso("Não foi possível iniciar a coleta. Tente de novo em instantes."); }
-}
-
-async function salvarMarcacao(id, campos) {
-  const novo = Object.assign({}, DADOS.status.itens[id] || {}, campos);
-  DADOS.status.itens[id] = novo;
-  try { await chamar("/api/status", Object.assign({ id: id }, novo)); }
-  catch (e) { aviso("Não foi possível salvar a marcação. Tente de novo em instantes."); }
-}
-
 function ligarEventos() {
-  $("btnAtualizar").addEventListener("click", () => atualizar(true));
   $("fBusca").addEventListener("input", e => { F.busca = e.target.value; F.limite = 100; render(); });
   $("fUf").addEventListener("change", e => { F.uf = e.target.value; F.limite = 100; salvarFiltros(); render(); });
   $("fMod").addEventListener("change", e => { F.mod = e.target.value; F.limite = 100; salvarFiltros(); render(); });
-  $("fSit").addEventListener("change", e => { F.sit = e.target.value; F.limite = 100; render(); });
-  [["fRelevantes", "relevantes"], ["fEncerradas", "ocultarEncerradas"], ["fDescartadas", "ocultarDescartadas"], ["fRodoviarios", "rodoviarios"]].forEach(([id, chave]) => {
+  [["fRelevantes", "relevantes"], ["fEncerradas", "ocultarEncerradas"], ["fRodoviarios", "rodoviarios"], ["fNovas", "novas"]].forEach(([id, chave]) => {
     $(id).checked = F[chave];
     $(id).addEventListener("change", e => { F[chave] = e.target.checked; F.limite = 100; salvarFiltros(); render(); });
   });
-
   $("regua").addEventListener("click", e => {
     const b = e.target.closest(".dia"); if (!b) return;
     F.dia = (F.dia === b.dataset.dia) ? null : b.dataset.dia; F.limite = 100; render();
   });
-
-  $("resumo").addEventListener("click", async e => {
+  $("resumo").addEventListener("click", e => {
     if (e.target.id === "btnLimparDia") { F.dia = null; render(); }
-    if (e.target.id === "btnVisto") {
-      try { const r = await chamar("/api/visto", {}); DADOS.status.visto_ate = r.visto_ate; render(); }
-      catch (err) { aviso("Não foi possível salvar. Tente de novo em instantes."); }
-    }
+    if (e.target.id === "btnVisto") { marcarVisita(); render(); }
   });
-
-  const lista = $("lista");
-  lista.addEventListener("click", e => {
+  $("lista").addEventListener("click", e => {
     if (e.target.id === "btnMais") { F.limite += 100; render(); return; }
     const texto = e.target.closest(".texto");
     if (texto) texto.closest("tr").classList.toggle("aberta");
   });
-  lista.addEventListener("change", e => {
-    const campo = e.target.dataset.campo; if (!campo) return;
-    const id = e.target.closest("tr").dataset.id;
-    salvarMarcacao(id, { [campo]: e.target.value }).then(() => { if (campo === "situacao") render(); else renderResumo(ordenar(filtrar(false))); });
-  });
-}
-
-let eventosLigados = false;
-
-async function partida() {
-  try { await carregar(); }
-  catch (e) {
-    if (e.message === "codigo") return;   // a tela de código já foi aberta
-    $("estado").textContent = "Não foi possível falar com o Radar. Recarregue a página.";
-    $("estado").classList.add("erro");
-    return;
-  }
-  textoEstado(null);
-  await atualizar(false);
 }
 
 async function iniciar() {
-  if (!(window.google && google.script && google.script.run) && !URL_API) {
-    $("estado").textContent = "Abra pelo link do Radar";
+  lerFiltros();
+  $("fNovas").checked = false;
+  ligarEventos();
+  const primeiraVisita = !VISITA_ANTERIOR;
+  try { await carregar(); }
+  catch (e) {
+    $("estado").textContent = "Não foi possível carregar a lista";
     $("estado").classList.add("erro");
-    $("lista").innerHTML = `<div class="vazio">Esta página só funciona pelo link do Radar (o endereço que termina em <strong>/exec</strong>). Peça o link a quem instalou.</div>`;
-    $("btnAtualizar").disabled = true;
+    $("lista").innerHTML = `<div class="vazio">Não consegui ler o arquivo <strong>licitacoes.json</strong>. Confira se ele existe no repositório e se a internet está funcionando; depois recarregue a página.</div>`;
     return;
   }
-  lerFiltros();
-  if (!eventosLigados) {
-    eventosLigados = true;
-    ligarEventos();
-    $("formEntrada").addEventListener("submit", e => {
-      e.preventDefault();
-      const c = $("entradaCodigo").value.trim();
-      if (!c) return;
-      guardarCodigo(c);
-      $("entrada").hidden = true;
-      $("entradaCodigo").value = "";
-      partida();
-    });
-    // Uso em equipe: a cada minuto traz as marcações e licitações dos colegas,
-    // sem mexer na tela enquanto você digita ou escolhe algo.
-    setInterval(async () => {
-      if (document.hidden || !$("entrada").hidden) return;
-      const ativo = document.activeElement;
-      if (ativo && /^(INPUT|TEXTAREA|SELECT)$/.test(ativo.tagName)) return;
-      try {
-        const p = await chamar("/api/progresso");
-        if (p.rodando) return;
-        await carregar();
-        textoEstado(null);
-      } catch (e) { /* tenta de novo no próximo ciclo */ }
-    }, 60000);
-  }
-  await partida();
+  if (primeiraVisita) marcarVisita();   // na primeira vez, nada aparece como "nova"
+  setInterval(async () => {
+    if (document.hidden) return;
+    const ativo = document.activeElement;
+    if (ativo && /^(INPUT|TEXTAREA|SELECT)$/.test(ativo.tagName)) return;
+    try { await carregar(); } catch (e) { /* tenta de novo no próximo ciclo */ }
+  }, 600000);
 }
 iniciar();
 </script>

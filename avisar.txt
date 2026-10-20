@@ -1,0 +1,3 @@
+# Quem recebe aviso por e-mail quando surge licitacao nova ou prazo perto.
+# Coloque um usuario do GitHub por linha (sem o @). Cada pessoa precisa ter conta no GitHub.
+# rafaelmunizcivil-sudo
