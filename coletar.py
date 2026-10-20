@@ -5,7 +5,7 @@ Coletor: consulta o PNCP (Portal Nacional de Contratacoes Publicas), filtra o qu
 interessa e grava licitacoes.json. Roda sozinho no GitHub Actions (veja
 .github/workflows/coletar.yml). Usa so a biblioteca padrao do Python.
 
-Para ajustar o que e "relevante", edite as listas PALAVRAS_CHAVE e PALAVRAS_EXCLUIR
+Para ajustar o que e "relevante", edite as listas SERVICOS, CONTEXTOS e PALAVRAS_EXCLUIR
 logo abaixo (pode editar direto no site do GitHub, no lapis).
 
 Modos:
@@ -41,22 +41,34 @@ UFS = ["AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS", "
 # Para incluir outras, acrescente o numero na lista abaixo (mais modalidades = coleta mais demorada).
 MODALIDADES = [6, 4, 5]    # as que mais trazem obras e servicos de engenharia, nesta ordem
 
-# Uma licitacao e "relevante" se o objeto ou o orgao tiver alguma destas palavras
-# (sem acento, minusculas). Sem $ no fim: vale qualquer palavra que COMECE assim.
+# Como o Radar decide o que e "relevante" para a CONSOL:
+#  1) Tudo que vem de orgao rodoviario/de infraestrutura (DER, DNIT, GOINFRA...) e relevante.
+#  2) De qualquer outro orgao (prefeituras etc.), so entra se o objeto tiver um SERVICO
+#     de engenharia (projeto, supervisao...) E um CONTEXTO de infraestrutura (rodovia, ponte...).
+#  3) Se aparecer qualquer palavra de PALAVRAS_EXCLUIR, nao entra.
+# Palavras sem acento e minusculas. Sem $ no fim: vale qualquer palavra que COMECE assim.
 # Com $ no fim: so vale a palavra inteira.
-PALAVRAS_CHAVE = [
-    "projeto", "anteprojeto", "supervis", "gerenciamento", "fiscaliza", "estudo",
-    "topograf", "geotecn", "sondagem", "rodovi", "estrada", "pavimen", "ponte",
-    "obra de arte", "oae", "drenagem", "ambiental", "licenciamento", "consultoria",
-    "levantamento", "aerolevantamento", "sinaliza", "restaura", "conserva",
-    "recupera", "melhoramento", "duplica", "terraplen", "contencao", "desapropria",
-    "engenharia", "viabilidade", "geoprocessamento", "cadastro", "bim$",
+SERVICOS = [
+    "projeto basico", "projeto executivo", "projetos", "anteprojeto", "elaboracao de projeto",
+    "supervis", "gerenciamento", "fiscaliza", "estudo", "topograf", "geotecn", "sondagem",
+    "levantamento", "aerolevantamento", "consultoria", "licenciamento", "assessoria tecnica",
+    "apoio tecnico", "geoprocessamento", "viabilidade", "desapropria", "bim$",
 ]
+CONTEXTOS = [
+    "rodovi", "estrada", "viari", "pavimen", "ponte", "viaduto", "obra de arte", "obras de arte",
+    "oae", "drenagem", "terraplen", "trafego", "faixa de dominio",
+    "duplicacao", "sinalizacao", "malha vi", "acostamento",
+]
+# Numeros de rodovia (BR-040, MG-050, SP 270...): contam como CONTEXTO
+RX_RODOVIA = re.compile(r"\b(?:br|mg|sp|pr|go|ba|rj|es|sc|rs|mt|ms|pe|ce|ma|pa|pi|rn|pb|se|al|to|ro|ac|am|ap|rr|df)[- ]?\d{2,3}\b")
 
-# Se aparecer qualquer uma destas, deixa de ser "relevante".
 PALAVRAS_EXCLUIR = [
-    "medicamento", "merenda", "alimenticio", "material de limpeza",
-    "material de expediente", "uniforme", "aquisicao de veiculo",
+    "medicamento", "merenda", "alimenticio", "alimentacao", "material de limpeza",
+    "material de expediente", "uniforme", "aquisicao de", "fornecimento de", "locacao de",
+    "rastreamento", "monitoramento de veiculo", "pneu", "combustivel", "software",
+    "mobiliario", "ar condicionado", "centro cultural", "hospital", "escola", "creche",
+    "ambulancia", "seguro", "plano de saude", "licenca de uso", "aquisicao", "cafe",
+    "papel higienico", "cartoes de memoria", "curadoria", "descartavel", "diarias",
 ]
 
 DIAS_A_FRENTE = 180        # consulta propostas que encerram ate daqui a N dias
@@ -274,12 +286,26 @@ def normalizar(r):
 
 # ------------------------------------------------------------------- modos
 
+RX_SERVICOS, RX_CONTEXTOS, RX_EXCLUIR = montar_regex(SERVICOS), montar_regex(CONTEXTOS), montar_regex(PALAVRAS_EXCLUIR)
+
+
+def classificar(rec):
+    """Define rec['rodoviario'] e rec['relevante'] pelas regras acima."""
+    orgao = sem_acento(rec.get("orgao"))
+    objeto = sem_acento(rec.get("objeto"))
+    rec["rodoviario"] = bool(RX_ORGAO_RODOVIARIO.search(orgao))
+    barrado = bool(RX_EXCLUIR.search(objeto))
+    servico = bool(RX_SERVICOS.search(objeto))
+    contexto = bool(RX_CONTEXTOS.search(objeto)) or bool(RX_RODOVIA.search(objeto))
+    rec["relevante"] = (rec["rodoviario"] and not barrado) or (servico and contexto and not barrado)
+    return rec
+
+
 def coletar():
     inicio = time.time()
     prazo_final = inicio + TEMPO_MAXIMO_MIN * 60
     data_final = (agora() + timedelta(days=DIAS_A_FRENTE)).strftime("%Y%m%d")
     pares = [(u, m) for m in MODALIDADES for u in UFS]
-    rx_inc, rx_exc = montar_regex(PALAVRAS_CHAVE), montar_regex(PALAVRAS_EXCLUIR)
     limite_encerradas = iso(agora() - timedelta(days=DIAS_GUARDAR))
     coletados, ok, erros = {}, 0, []
 
@@ -304,9 +330,7 @@ def coletar():
                     enc = rec["encerramento"]
                     if isinstance(enc, str) and enc < limite_encerradas:
                         continue
-                    texto = sem_acento(rec["objeto"] + " " + rec["orgao"])
-                    rec["relevante"] = bool(rx_inc and rx_inc.search(texto)) and not (rx_exc and rx_exc.search(texto))
-                    rec["rodoviario"] = bool(RX_ORGAO_RODOVIARIO.search(sem_acento(rec["orgao"])))
+                    classificar(rec)
                     if rec["relevante"] or rec["rodoviario"]:
                         coletados[rec["id"]] = rec
         return falhas
@@ -326,7 +350,7 @@ def coletar():
         sys.exit(1)
 
     anterior = ler_json(ARQUIVO, {})
-    antigos = {r["id"]: r for r in lista_de_itens(anterior) if r.get("id")}
+    antigos = {r["id"]: classificar(r) for r in lista_de_itens(anterior) if r.get("id")}   # reaplica as regras atuais
     primeira = not antigos
     agora_s = iso(agora())
     novas = []
@@ -337,8 +361,8 @@ def coletar():
         if not ant and rec["relevante"]:
             novas.append(rec)
         antigos[id_] = rec
-    itens = [r for r in antigos.values()
-             if not isinstance(r.get("encerramento"), str) or r["encerramento"] >= limite_encerradas]
+    itens = [r for r in antigos.values() if (r["relevante"] or r["rodoviario"])
+             and (not isinstance(r.get("encerramento"), str) or r["encerramento"] >= limite_encerradas)]
     itens.sort(key=lambda r: r.get("encerramento") or "9999")
     gravar_json(ARQUIVO, {"gerado_em": agora_s, "consultas": len(pares),
                           "consultas_com_erro": len(pares) - ok, "itens": itens})
