@@ -15,6 +15,7 @@ Modos:
 import json
 import os
 import threading
+from html.parser import HTMLParser
 import re
 import sys
 import time
@@ -67,7 +68,7 @@ PALAVRAS_EXCLUIR = [
     "material de expediente", "uniforme", "aquisicao de", "fornecimento de", "locacao de",
     "rastreamento", "monitoramento de veiculo", "pneu", "combustivel", "software",
     "mobiliario", "ar condicionado", "centro cultural", "hospital", "escola", "creche",
-    "ambulancia", "seguro", "plano de saude", "licenca de uso", "aquisicao", "cafe",
+    "chaveiro", "vigilancia", "telefonia", "copeira", "ambulancia", "seguro", "plano de saude", "licenca de uso", "aquisicao", "cafe",
     "papel higienico", "cartoes de memoria", "curadoria", "descartavel", "diarias",
 ]
 
@@ -284,6 +285,165 @@ def normalizar(r):
     }
 
 
+# ------------------------------------------------------------------- GOINFRA (site proprio)
+# A GOINFRA divulga no portal SGL; parte do que publica la nao aparece no PNCP.
+
+GOINFRA_URLS = ["http://sgl.goinfra.go.gov.br/portal_licitacao/index.php",
+                "https://sgl.goinfra.go.gov.br/portal_licitacao/index.php"]
+GOINFRA_BASE = "http://sgl.goinfra.go.gov.br/portal_licitacao/"
+GOINFRA_MODALIDADES = {"PE": "Pregão Eletrônico", "PE SRP": "Pregão Eletrônico (SRP)", "PP": "Pregão Presencial",
+                       "PP SRP": "Pregão Presencial (SRP)", "CO": "Concorrência", "CO SRP": "Concorrência (SRP)",
+                       "TP": "Tomada de Preços", "DL": "Dispensa de Licitação", "IN": "Inexigibilidade",
+                       "CV": "Convite", "CP": "Concurso"}
+
+
+class _Tabelas(HTMLParser):
+    """Le todas as tabelas da pagina: lista de {secao, linhas:[[{texto, href}...]]}."""
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.tabelas, self._tab, self._linha, self._cel = [], None, None, None
+        self._texto_solto, self.secao = [], ""
+
+    def handle_starttag(self, tag, attrs):
+        a = dict(attrs)
+        if tag == "table":
+            self._tab = {"secao": self.secao, "linhas": []}
+        elif tag == "tr" and self._tab is not None:
+            self._linha = []
+        elif tag in ("td", "th") and self._linha is not None:
+            self._cel = {"texto": "", "href": ""}
+        elif tag == "a" and self._cel is not None and a.get("href") and not self._cel["href"]:
+            self._cel["href"] = a["href"]
+        elif tag in ("br", "p") and self._cel is not None:
+            self._cel["texto"] += " "
+
+    def handle_endtag(self, tag):
+        if tag in ("td", "th") and self._cel is not None and self._linha is not None:
+            self._cel["texto"] = re.sub(r"\s+", " ", self._cel["texto"]).strip()
+            self._linha.append(self._cel)
+            self._cel = None
+        elif tag == "tr" and self._linha is not None and self._tab is not None:
+            if self._linha:
+                self._tab["linhas"].append(self._linha)
+            self._linha = None
+        elif tag == "table" and self._tab is not None:
+            self.tabelas.append(self._tab)
+            self._tab = None
+
+    def handle_data(self, data):
+        if self._cel is not None:
+            self._cel["texto"] += data
+        else:
+            t = sem_acento(data).strip()
+            if t:
+                if "andamento" in t and "licita" in t:
+                    self.secao = "andamento"
+                elif "conclu" in t and "licita" in t:
+                    self.secao = "concluidas"
+
+
+def _ler_pagina(url):
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (CONSOL-RadarLicitacoes/2.0)",
+                                               "Accept": "text/html"})
+    with urllib.request.urlopen(req, timeout=60) as r:
+        bruto = r.read()
+    for cod in ("utf-8", "latin-1"):
+        try:
+            return bruto.decode(cod)
+        except UnicodeDecodeError:
+            continue
+    return bruto.decode("utf-8", "replace")
+
+
+def interpretar_goinfra(html):
+    """Transforma o HTML do portal em registros no mesmo formato do PNCP (ja normalizados)."""
+    p = _Tabelas()
+    p.feed(html)
+    itens = []
+    for tab in p.tabelas:
+        if tab["secao"] == "concluidas":
+            continue
+        linhas = tab["linhas"]
+        cab = None
+        for i, l in enumerate(linhas):
+            nomes = [sem_acento(c["texto"]) for c in l]
+            if "edital" in nomes and "objeto" in nomes:
+                cab = {n: j for j, n in enumerate(nomes)}
+                dados = linhas[i + 1:]
+                break
+        if not cab:
+            continue
+        col = lambda *chaves: next((cab[k] for k in chaves if k in cab), None)
+        c_ed, c_lote, c_mod, c_obj = col("edital"), col("lote"), col("modalidade"), col("objeto")
+        c_val, c_data = col("orcamento", "valor"), col("data realizacao", "data")
+        for l in dados:
+            if len(l) <= max(x for x in (c_ed, c_obj) if x is not None):
+                continue
+            ed = l[c_ed]
+            num_ano = re.search(r"(\d+)\s*/\s*(\d{4})", ed["texto"])
+            href = ed["href"]
+            if href and not href.lower().startswith("http"):
+                href = urllib.parse.urljoin(GOINFRA_BASE, href)
+            idl = re.search(r"idLicitacao=(\d+)", href or "")
+            lote = (l[c_lote]["texto"] if c_lote is not None and c_lote < len(l) else "").strip()
+            cod = (l[c_mod]["texto"] if c_mod is not None and c_mod < len(l) else "").strip()
+            val = None
+            if c_val is not None and c_val < len(l):
+                m = re.search(r"([\d.]+,\d{2})", l[c_val]["texto"])
+                if m:
+                    val = float(m.group(1).replace(".", "").replace(",", "."))
+            enc = None
+            if c_data is not None and c_data < len(l):
+                m = re.search(r"(\d{2})/(\d{2})/(\d{4})(?:\s+(\d{2}):(\d{2})(?::(\d{2}))?)?", l[c_data]["texto"])
+                if m:
+                    enc = "%s-%s-%sT%s:%s:%s" % (m.group(3), m.group(2), m.group(1), m.group(4) or "00", m.group(5) or "00", m.group(6) or "00")
+            objeto = l[c_obj]["texto"].strip().strip('"').strip()
+            if not (num_ano or idl) or not objeto:
+                continue
+            itens.append({
+                "id": "goinfra-%s-%s" % (idl.group(1) if idl else ed["texto"], lote or "0"),
+                "orgao": "AGENCIA GOIANA DE INFRAESTRUTURA E TRANSPORTES - GOINFRA",
+                "unidade": "", "uf": "GO", "municipio": "",
+                "objeto": objeto,
+                "modalidade": GOINFRA_MODALIDADES.get(cod.upper(), cod),
+                "situacao": "Em andamento",
+                "numero": (num_ano.group(1) if num_ano else ed["texto"]) + (" (lote %s)" % lote if lote and lote not in ("0", "00", "1", "01") else ""),
+                "ano": int(num_ano.group(2)) if num_ano else None,
+                "abertura": enc, "encerramento": enc, "valor": val,
+                "link_pncp": "", "link_origem": href or GOINFRA_URLS[0],
+                "fonte": "site da GOINFRA (SGL)",
+            })
+    return itens
+
+
+def coletar_goinfra():
+    """Devolve a lista da GOINFRA, ou None se o site nao respondeu (a coleta segue sem ela)."""
+    try:
+        arq = os.environ.get("RADAR_MOCK_GOINFRA")
+        if arq:
+            with open(arq, "r", encoding="utf-8") as f:
+                html = f.read()
+        else:
+            html, ultimo = None, None
+            for url in GOINFRA_URLS:
+                try:
+                    html = _ler_pagina(url)
+                    break
+                except Exception as e:  # noqa: BLE001
+                    ultimo = e
+            if html is None:
+                raise ultimo
+        itens = interpretar_goinfra(html)
+        print("GOINFRA (site proprio): %d licitacao(oes) em andamento lida(s)." % len(itens))
+        if not itens:
+            print("  aviso: a pagina da GOINFRA abriu, mas nenhuma licitacao foi reconhecida (o formato pode ter mudado).")
+        return itens
+    except Exception as e:  # noqa: BLE001 - nunca derrubar a coleta do PNCP por causa de um site
+        print("GOINFRA (site proprio): nao foi possivel ler (%s). A coleta segue so com o PNCP." % e)
+        return None
+
+
 # ------------------------------------------------------------------- modos
 
 RX_SERVICOS, RX_CONTEXTOS, RX_EXCLUIR = montar_regex(SERVICOS), montar_regex(CONTEXTOS), montar_regex(PALAVRAS_EXCLUIR)
@@ -340,6 +500,18 @@ def coletar():
         print("Repetindo %d consulta(s) que falharam..." % len(falhas))
         falhas = rodada([(u, m) for u, m, _ in falhas])
     erros = ["%s/%s: %s" % f for f in falhas]
+
+    # Fontes que nao estao no PNCP (sites proprios dos orgaos)
+    extras = coletar_goinfra() or []
+    do_pncp = {(re.sub(r"\D", "", str(r["numero"]).split("/")[0]).lstrip("0"), r["ano"]) for r in coletados.values()
+               if r["uf"] == "GO" and re.search(r"goinfra|goiana de infra", sem_acento(r["orgao"]))}
+    for rec in extras:
+        num = re.sub(r"\D", "", str(rec["numero"]).split(" ")[0]).lstrip("0")
+        if (num, rec["ano"]) in do_pncp:
+            continue    # a mesma licitacao ja veio do PNCP
+        classificar(rec)
+        if rec["relevante"] or rec["rodoviario"]:
+            coletados[rec["id"]] = rec
 
     print("Consultas ok: %d de %d (%.0f s). Itens guardados desta coleta: %d"
           % (ok, len(pares), time.time() - inicio, len(coletados)))
