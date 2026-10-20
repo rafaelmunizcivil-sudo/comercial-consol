@@ -38,7 +38,8 @@ UFS = ["AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS", "
 
 # Modalidades do PNCP: 3 concurso, 4 concorrencia eletronica, 5 concorrencia presencial,
 # 6 pregao eletronico, 7 pregao presencial, 12 credenciamento.
-MODALIDADES = [3, 4, 5, 6, 7, 12]
+# Para incluir outras, acrescente o numero na lista abaixo (mais modalidades = coleta mais demorada).
+MODALIDADES = [6, 4, 5]    # as que mais trazem obras e servicos de engenharia, nesta ordem
 
 # Uma licitacao e "relevante" se o objeto ou o orgao tiver alguma destas palavras
 # (sem acento, minusculas). Sem $ no fim: vale qualquer palavra que COMECE assim.
@@ -64,9 +65,9 @@ DIAS_ALERTA_PRAZO = 3      # o aviso diario de prazos olha ate N dias a frente
 TAMANHO_PAGINA = 50        # a API aceita no minimo 10; se recusar 50, cai para 10
 PARALELO = 2               # consultas ao mesmo tempo (o PNCP limita a velocidade: erro 429)
 INTERVALO = 0.6            # segundos minimos entre duas requisicoes (somando todas as consultas)
-TEMPO_MAXIMO_MIN = 70      # nunca passar disso (o GitHub corta em 90)
+TEMPO_MAXIMO_MIN = 75      # nunca passar disso (o GitHub corta em 90); o que ficar pendente e pulado
 PAGINAS_MAXIMO = 200
-MINIMO_DE_SUCESSO = 0.5    # com menos de 50% das consultas ok, nao sobrescreve a lista
+MINIMO_DE_SUCESSO = 0.0    # guarda o resultado parcial (a lista anterior nao e apagada); so falha se nada deu certo
 
 API = "https://pncp.gov.br/api/consulta/v1/contratacoes/proposta"
 RX_ORGAO_RODOVIARIO = re.compile(
@@ -277,7 +278,7 @@ def coletar():
     inicio = time.time()
     prazo_final = inicio + TEMPO_MAXIMO_MIN * 60
     data_final = (agora() + timedelta(days=DIAS_A_FRENTE)).strftime("%Y%m%d")
-    pares = [(u, m) for u in UFS for m in MODALIDADES]
+    pares = [(u, m) for m in MODALIDADES for u in UFS]
     rx_inc, rx_exc = montar_regex(PALAVRAS_CHAVE), montar_regex(PALAVRAS_EXCLUIR)
     limite_encerradas = iso(agora() - timedelta(days=DIAS_GUARDAR))
     coletados, ok, erros = {}, 0, []
@@ -295,6 +296,9 @@ def coletar():
                     falhas.append((u, m, str(e)))
                     continue
                 ok += 1
+                feitas = ok + len(falhas)
+                if feitas % 10 == 0:
+                    print("  progresso: %d de %d consultas (%d min)" % (feitas, len(lista), (time.time() - inicio) / 60), flush=True)
                 for r in registros:
                     rec = normalizar(r)
                     enc = rec["encerramento"]
@@ -317,8 +321,8 @@ def coletar():
           % (ok, len(pares), time.time() - inicio, len(coletados)))
     for e in erros[:15]:
         print("  erro:", e)
-    if ok < len(pares) * MINIMO_DE_SUCESSO:
-        print("Poucas consultas deram certo; a lista anterior foi mantida.")
+    if ok == 0 or ok < len(pares) * MINIMO_DE_SUCESSO:
+        print("Nenhuma consulta deu certo; a lista anterior foi mantida.")
         sys.exit(1)
 
     anterior = ler_json(ARQUIVO, {})
