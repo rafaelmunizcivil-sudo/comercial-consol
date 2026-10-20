@@ -57,7 +57,7 @@ SERVICOS = [
 CONTEXTOS = [
     "rodovi", "estrada", "viari", "pavimen", "ponte", "viaduto", "obra de arte", "obras de arte",
     "oae", "drenagem", "terraplen", "trafego", "faixa de dominio",
-    "duplicacao", "sinalizacao", "malha vi", "acostamento",
+    "duplicacao", "sinalizacao viaria", "sinalizacao rodoviaria", "malha vi", "acostamento",
 ]
 # Numeros de rodovia (BR-040, MG-050, SP 270...): contam como CONTEXTO
 RX_RODOVIA = re.compile(r"\b(?:br|mg|sp|pr|go|ba|rj|es|sc|rs|mt|ms|pe|ce|ma|pa|pi|rn|pb|se|al|to|ro|ac|am|ap|rr|df)[- ]?\d{2,3}\b")
