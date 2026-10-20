@@ -38,7 +38,11 @@ jobs:
             echo "Sem mudanças."
           else
             git commit -m "Atualiza licitações"
-            git push
+            for i in 1 2 3 4 5; do
+              git pull --rebase origin main && git push && exit 0
+              sleep 5
+            done
+            exit 1
           fi
 
       - name: Avisar licitações novas
