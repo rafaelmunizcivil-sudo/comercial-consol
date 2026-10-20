@@ -1,16 +1,270 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Radar de Licitações</title>
-  <meta http-equiv="refresh" content="0; url=https://script.google.com/macros/s/AKfycbw4NdX4IPNhUGg434w7rBiiFxipSpwGAvlXqsRkppCNEE8rxaGBnjyExOX77xdELy0r/exec">
-  <script>
-    window.location.replace("https://script.google.com/macros/s/AKfycbw4NdX4IPNhUGg434w7rBiiFxipSpwGAvlXqsRkppCNEE8rxaGBnjyExOX77xdELy0r/exec");
-  </script>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Radar de licitações</title>
+<style>
+  :root {
+    --papel: #ECEEEE; --painel: #F7F8F8; --tinta: #1B2329; --tinta-2: #55626B; --linha: #CAD1D5;
+    --asfalto: #2A333A; --asfalto-texto: #E8ECEE; --faixa: #F2B705; --alerta: #B93526;
+    --atencao: #B7791F; --ok: #2B7A4B; --link: #1F5FA8;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --papel: #161B20; --painel: #1E252B; --tinta: #E8ECEE; --tinta-2: #9AA7B0; --linha: #333D45;
+      --asfalto: #0F1418; --alerta: #E5705F; --atencao: #E0A53A; --ok: #5BB383; --link: #6FB0F0;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--papel); color: var(--tinta);
+    font-family: "Bahnschrift", "Segoe UI", system-ui, -apple-system, sans-serif; line-height: 1.45; }
+  header { background: var(--asfalto); color: var(--asfalto-texto); border-bottom: 4px solid var(--faixa); }
+  .topo { max-width: 1200px; margin: 0 auto; padding: 14px 16px; display: flex; align-items: baseline;
+    justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  h1 { margin: 0; font-size: 22px; letter-spacing: .2px; }
+  #atualizado { font-size: 13px; opacity: .85; }
+  main { max-width: 1200px; margin: 0 auto; padding: 16px; }
+  .painel { background: var(--painel); border: 1px solid var(--linha); border-radius: 8px; padding: 14px 16px; margin-bottom: 14px; }
+  .painel h2 { margin: 0 0 2px; font-size: 16px; }
+  .painel p { margin: 0 0 10px; font-size: 13px; color: var(--tinta-2); }
+  /* régua de prazos */
+  #regua { display: grid; grid-template-columns: repeat(30, minmax(0, 1fr)); gap: 3px; align-items: end; height: 92px;
+    border-bottom: 2px solid var(--tinta); padding-bottom: 2px; }
+  .dia { display: flex; flex-direction: column; justify-content: flex-end; align-items: center; height: 100%;
+    cursor: pointer; border-radius: 3px; position: relative; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; }
+  .dia:hover { background: color-mix(in srgb, var(--faixa) 22%, transparent); }
+  .dia.sel { background: color-mix(in srgb, var(--faixa) 40%, transparent); outline: 2px solid var(--faixa); }
+  .dia .barra { width: 100%; max-width: 22px; background: var(--ok); border-radius: 2px 2px 0 0; min-height: 0; }
+  .dia.hoje .barra, .dia.amanha .barra { background: var(--alerta); }
+  .dia.cedo .barra { background: var(--atencao); }
+  .dia .n { font-size: 11px; font-weight: 600; min-height: 14px; }
+  .legenda-dias { display: grid; grid-template-columns: repeat(30, minmax(0, 1fr)); gap: 3px; margin-top: 3px; }
+  .legenda-dias span { text-align: center; font-size: 10px; color: var(--tinta-2); }
+  .legenda-dias span.fds { opacity: .5; }
+  /* filtros */
+  .filtros { display: grid; grid-template-columns: 1fr repeat(2, minmax(150px, 220px)); gap: 8px; margin-bottom: 8px; }
+  input[type=search], select { width: 100%; padding: 10px 12px; border: 1px solid var(--linha); border-radius: 6px;
+    background: var(--painel); color: var(--tinta); font: inherit; font-size: 15px; }
+  .opcoes { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 10px 2px 14px; font-size: 14px; }
+  .opcoes label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+  .linha-resumo { display: flex; justify-content: space-between; align-items: center; margin: 0 2px 8px;
+    font-size: 14px; color: var(--tinta-2); gap: 8px; flex-wrap: wrap; }
+  #limpar { background: none; border: 1px solid var(--linha); border-radius: 6px; color: var(--tinta); padding: 4px 10px; cursor: pointer; font: inherit; font-size: 13px; }
+  /* cartões */
+  .item { background: var(--painel); border: 1px solid var(--linha); border-left: 5px solid var(--ok); border-radius: 8px;
+    padding: 12px 14px; margin-bottom: 10px; }
+  .item.hoje, .item.amanha { border-left-color: var(--alerta); }
+  .item.cedo { border-left-color: var(--atencao); }
+  .item.encerrada { opacity: .6; border-left-color: var(--linha); }
+  .item .cab { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; flex-wrap: wrap; }
+  .item .orgao { font-weight: 700; font-size: 15px; }
+  .item .prazo { font-size: 13px; font-weight: 700; white-space: nowrap; }
+  .item.hoje .prazo, .item.amanha .prazo { color: var(--alerta); }
+  .item.cedo .prazo { color: var(--atencao); }
+  .item .objeto { margin: 6px 0 8px; font-size: 14px; }
+  .meta { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 13px; color: var(--tinta-2); }
+  .tag { display: inline-block; font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 10px; margin-right: 6px;
+    background: var(--faixa); color: #1B2329; vertical-align: 1px; }
+  .tag.cinza { background: var(--linha); color: var(--tinta); }
+  .links { margin-top: 8px; font-size: 14px; display: flex; gap: 16px; flex-wrap: wrap; }
+  a { color: var(--link); }
+  .vazio { text-align: center; color: var(--tinta-2); padding: 40px 12px; }
+  #mais { display: block; margin: 12px auto 28px; padding: 10px 22px; border: 1px solid var(--linha); border-radius: 6px;
+    background: var(--painel); color: var(--tinta); cursor: pointer; font: inherit; }
+  .aviso { background: color-mix(in srgb, var(--atencao) 18%, var(--painel)); border: 1px solid var(--atencao);
+    border-radius: 8px; padding: 10px 14px; margin-bottom: 14px; font-size: 14px; }
+  @media (max-width: 720px) {
+    .filtros { grid-template-columns: 1fr; }
+    .legenda-dias span:not(.mostra) { visibility: hidden; }
+    #regua { height: 72px; }
+    h1 { font-size: 19px; }
+  }
+</style>
 </head>
-<body style="font-family: system-ui, sans-serif; text-align: center; padding: 48px 16px;">
-  <p>Abrindo o Radar de Licitações...</p>
-  <p><a href="https://script.google.com/macros/s/AKfycbw4NdX4IPNhUGg434w7rBiiFxipSpwGAvlXqsRkppCNEE8rxaGBnjyExOX77xdELy0r/exec">Clique aqui se não abrir sozinho</a></p>
+<body>
+<header><div class="topo"><h1>Radar de licitações</h1><span id="atualizado">Carregando…</span></div></header>
+<main>
+  <div id="aviso" class="aviso" hidden></div>
+
+  <section class="painel">
+    <h2>Encerramentos nos próximos 30 dias</h2>
+    <p>Cada coluna é um dia. Clique em um dia para listar só o que encerra nele.</p>
+    <div id="regua"></div>
+    <div class="legenda-dias" id="legenda"></div>
+  </section>
+
+  <div class="filtros">
+    <input type="search" id="busca" placeholder="Buscar por objeto, órgão ou cidade" aria-label="Buscar">
+    <select id="uf" aria-label="Estado"><option value="">Todos os estados</option></select>
+    <select id="modalidade" aria-label="Modalidade"><option value="">Todas as modalidades</option></select>
+  </div>
+  <div class="opcoes">
+    <label><input type="checkbox" id="soRelevantes" checked> Só relevantes</label>
+    <label><input type="checkbox" id="ocultarEncerradas" checked> Ocultar encerradas</label>
+    <label><input type="checkbox" id="soRodoviarios"> Só órgãos rodoviários</label>
+  </div>
+
+  <div class="linha-resumo"><span id="resumo"></span><button id="limpar" hidden>Limpar filtro de dia</button></div>
+  <div id="lista"></div>
+  <button id="mais" hidden>Mostrar mais</button>
+</main>
+
+<script>
+(function () {
+  "use strict";
+  var $ = function (id) { return document.getElementById(id); };
+  var DADOS = [], diaSel = null, mostrando = 50, PASSO = 50;
+  var DIA_MS = 86400000;
+
+  function norm(s) { return String(s == null ? "" : s).normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase(); }
+  // "2026-10-25T14:00:00" -> Date local (sem converter fuso: o PNCP já manda horário de Brasília)
+  function dataDe(iso) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2}))?/.exec(iso || "");
+    return m ? new Date(+m[1], +m[2] - 1, +m[3], +(m[4] || 0), +(m[5] || 0)) : null;
+  }
+  function chaveDia(d) { return d.getFullYear() + "-" + ("0" + (d.getMonth() + 1)).slice(-2) + "-" + ("0" + d.getDate()).slice(-2); }
+  function inicioDoDia(d) { return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }
+  function fmtData(d) { return d ? ("0" + d.getDate()).slice(-2) + "/" + ("0" + (d.getMonth() + 1)).slice(-2) + "/" + d.getFullYear() : ""; }
+  function fmtHora(d) { return d ? ("0" + d.getHours()).slice(-2) + ":" + ("0" + d.getMinutes()).slice(-2) : ""; }
+  function fmtValor(v) { return typeof v === "number" ? v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : ""; }
+  function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
+  function urlSegura(u) { return /^https?:\/\//i.test(u || "") ? u : ""; }
+
+  function hoje() { return inicioDoDia(new Date()); }
+  function diasAte(d) { return Math.round((inicioDoDia(d) - hoje()) / DIA_MS); }
+
+  function classeDe(it) {
+    var d = dataDe(it.encerramento);
+    if (!d) return "";
+    if (d < new Date()) return "encerrada";
+    var n = diasAte(d);
+    return n <= 0 ? "hoje" : n === 1 ? "amanha" : n <= 5 ? "cedo" : "";
+  }
+  function textoPrazo(it) {
+    var d = dataDe(it.encerramento);
+    if (!d) return "Sem prazo informado";
+    if (d < new Date()) return "Encerrada em " + fmtData(d);
+    var n = diasAte(d), h = " às " + fmtHora(d);
+    if (n <= 0) return "Encerra HOJE" + h;
+    if (n === 1) return "Encerra amanhã" + h;
+    return "Encerra em " + n + " dias (" + fmtData(d) + h + ")";
+  }
+
+  function filtrados(ignorarDia) {
+    var q = norm($("busca").value.trim()), uf = $("uf").value, mod = $("modalidade").value;
+    var soRel = $("soRelevantes").checked, ocEnc = $("ocultarEncerradas").checked, soRod = $("soRodoviarios").checked;
+    var agora = new Date();
+    return DADOS.filter(function (it) {
+      if (soRel && !it.relevante) return false;
+      if (soRod && !it.rodoviario) return false;
+      if (uf && it.uf !== uf) return false;
+      if (mod && it.modalidade !== mod) return false;
+      var d = dataDe(it.encerramento);
+      if (ocEnc && d && d < agora) return false;
+      if (!ignorarDia && diaSel) { if (!d || chaveDia(d) !== diaSel) return false; }
+      if (q && norm(it._texto).indexOf(q) < 0) return false;
+      return true;
+    });
+  }
+
+  function desenharRegua() {
+    var base = filtrados(true), cont = {}, i, max = 1;
+    base.forEach(function (it) {
+      var d = dataDe(it.encerramento);
+      if (d && d >= new Date()) { var k = chaveDia(d); cont[k] = (cont[k] || 0) + 1; }
+    });
+    var h = hoje(), regua = "", leg = "";
+    for (i = 0; i < 30; i++) { var k0 = chaveDia(new Date(h.getTime() + i * DIA_MS)); if ((cont[k0] || 0) > max) max = cont[k0]; }
+    var sem = ["D", "S", "T", "Q", "Q", "S", "S"];
+    for (i = 0; i < 30; i++) {
+      var d = new Date(h.getFullYear(), h.getMonth(), h.getDate() + i), k = chaveDia(d), n = cont[k] || 0;
+      var cls = "dia" + (i === 0 ? " hoje" : i === 1 ? " amanha" : i <= 5 ? " cedo" : "") + (k === diaSel ? " sel" : "");
+      regua += '<button type="button" class="' + cls + '" data-dia="' + k + '" title="' + fmtData(d) + ": " + n + (n === 1 ? " licitação" : " licitações") + '">' +
+        '<span class="n">' + (n || "") + '</span><span class="barra" style="height:' + Math.round((n / max) * 58) + 'px"></span></button>';
+      var fds = d.getDay() === 0 || d.getDay() === 6;
+      leg += '<span class="' + (fds ? "fds " : "") + (i % 5 === 0 ? "mostra" : "") + '">' + d.getDate() + "<br>" + sem[d.getDay()] + "</span>";
+    }
+    $("regua").innerHTML = regua;
+    $("legenda").innerHTML = leg;
+  }
+
+  function cartao(it) {
+    var cl = classeDe(it), links = "";
+    var lp = urlSegura(it.link_pncp), lo = urlSegura(it.link_origem);
+    if (lp) links += '<a href="' + esc(lp) + '" target="_blank" rel="noopener">Ver no PNCP</a>';
+    if (lo) links += '<a href="' + esc(lo) + '" target="_blank" rel="noopener">Sistema de origem</a>';
+    var novo = it.primeira_vez && (new Date() - dataDe(it.primeira_vez)) < 2 * DIA_MS;
+    var meta = [];
+    if (it.uf || it.municipio) meta.push(esc([it.municipio, it.uf].filter(Boolean).join(" / ")));
+    if (it.modalidade) meta.push(esc(it.modalidade));
+    if (it.numero) meta.push("Nº " + esc(it.numero) + (it.ano ? "/" + esc(it.ano) : ""));
+    if (it.valor != null) meta.push(esc(fmtValor(it.valor)));
+    if (it.unidade) meta.push(esc(it.unidade));
+    return '<article class="item ' + cl + '"><div class="cab"><div class="orgao">' +
+      (novo ? '<span class="tag">NOVA</span>' : "") + (it.rodoviario ? '<span class="tag cinza">RODOVIÁRIO</span>' : "") + esc(it.orgao) +
+      '</div><div class="prazo">' + esc(textoPrazo(it)) + '</div></div>' +
+      '<div class="objeto">' + esc(it.objeto) + '</div><div class="meta">' + meta.map(function (m) { return "<span>" + m + "</span>"; }).join("") + "</div>" +
+      (links ? '<div class="links">' + links + "</div>" : "") + "</article>";
+  }
+
+  function desenhar() {
+    desenharRegua();
+    var lista = filtrados(false);
+    $("resumo").textContent = lista.length + (lista.length === 1 ? " licitação" : " licitações") +
+      (diaSel ? " encerrando em " + fmtData(dataDe(diaSel + "T00:00:00")) : "");
+    $("limpar").hidden = !diaSel;
+    $("lista").innerHTML = lista.length
+      ? lista.slice(0, mostrando).map(cartao).join("")
+      : '<div class="vazio">Nenhuma licitação com esses filtros.</div>';
+    $("mais").hidden = lista.length <= mostrando;
+    if (!$("mais").hidden) $("mais").textContent = "Mostrar mais (" + (lista.length - mostrando) + " restantes)";
+  }
+
+  function recomeca() { mostrando = PASSO; desenhar(); }
+
+  function preencherSelect(id, valores) {
+    var s = $(id);
+    valores.forEach(function (v) { var o = document.createElement("option"); o.value = v; o.textContent = v; s.appendChild(o); });
+  }
+
+  function iniciar(json) {
+    DADOS = (json.itens || []).map(function (it) { it._texto = [it.objeto, it.orgao, it.municipio, it.unidade, it.uf].join(" "); return it; });
+    DADOS.sort(function (a, b) { return (a.encerramento || "9999") < (b.encerramento || "9999") ? -1 : 1; });
+    var g = dataDe(json.gerado_em);
+    $("atualizado").textContent = g ? "Atualizado em " + fmtData(g) + " às " + fmtHora(g) : "Atualização desconhecida";
+    if (g && (new Date() - g) > 2 * DIA_MS) {
+      $("aviso").hidden = false;
+      $("aviso").textContent = "Atenção: a última coleta foi há mais de 2 dias. A lista pode estar desatualizada.";
+    } else if (json.consultas_com_erro) {
+      $("aviso").hidden = false;
+      $("aviso").textContent = json.consultas_com_erro + " consultas ao PNCP falharam na última coleta; algumas licitações podem estar faltando. A próxima rodada tenta de novo.";
+    }
+    var ufs = {}, mods = {};
+    DADOS.forEach(function (it) { if (it.uf) ufs[it.uf] = 1; if (it.modalidade) mods[it.modalidade] = 1; });
+    preencherSelect("uf", Object.keys(ufs).sort());
+    preencherSelect("modalidade", Object.keys(mods).sort());
+    desenhar();
+  }
+
+  $("regua").addEventListener("click", function (e) {
+    var b = e.target.closest(".dia"); if (!b) return;
+    diaSel = diaSel === b.getAttribute("data-dia") ? null : b.getAttribute("data-dia");
+    recomeca();
+  });
+  $("limpar").addEventListener("click", function () { diaSel = null; recomeca(); });
+  $("mais").addEventListener("click", function () { mostrando += PASSO; desenhar(); });
+  var t; $("busca").addEventListener("input", function () { clearTimeout(t); t = setTimeout(recomeca, 150); });
+  ["uf", "modalidade", "soRelevantes", "ocultarEncerradas", "soRodoviarios"].forEach(function (id) { $(id).addEventListener("change", recomeca); });
+
+  fetch("licitacoes.json?v=" + Date.now(), { cache: "no-store" })
+    .then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
+    .then(iniciar)
+    .catch(function () {
+      $("atualizado").textContent = "Sem dados ainda";
+      $("lista").innerHTML = '<div class="vazio">A primeira coleta ainda não rodou. Assim que ela terminar, a lista aparece aqui.</div>';
+    });
+})();
+</script>
 </body>
 </html>
