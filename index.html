@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8">
@@ -6,265 +6,558 @@
 <title>Radar de licitações</title>
 <style>
   :root {
-    --papel: #ECEEEE; --painel: #F7F8F8; --tinta: #1B2329; --tinta-2: #55626B; --linha: #CAD1D5;
-    --asfalto: #2A333A; --asfalto-texto: #E8ECEE; --faixa: #F2B705; --alerta: #B93526;
-    --atencao: #B7791F; --ok: #2B7A4B; --link: #1F5FA8;
+    --papel: #ECEEEE;
+    --painel: #F7F8F8;
+    --tinta: #1B2329;
+    --tinta-2: #55626B;
+    --linha: #CAD1D5;
+    --asfalto: #2A333A;
+    --asfalto-texto: #E8ECEE;
+    --faixa: #F2B705;
+    --alerta: #B93526;
+    --ok: #2B7A4B;
+    --link: #1F5FA8;
+    --foco: #1F5FA8;
+    --fonte: "Bahnschrift", "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
   }
   @media (prefers-color-scheme: dark) {
     :root {
-      --papel: #161B20; --painel: #1E252B; --tinta: #E8ECEE; --tinta-2: #9AA7B0; --linha: #333D45;
-      --asfalto: #0F1418; --alerta: #E5705F; --atencao: #E0A53A; --ok: #5BB383; --link: #6FB0F0;
+      --papel: #1A2025;
+      --painel: #222A30;
+      --tinta: #E6EAEC;
+      --tinta-2: #9AA7AF;
+      --linha: #36424A;
+      --asfalto: #12171B;
+      --alerta: #E4695B;
+      --ok: #5DB988;
+      --link: #7FB2EE;
+      --foco: #7FB2EE;
     }
   }
   * { box-sizing: border-box; }
-  body { margin: 0; background: var(--papel); color: var(--tinta);
-    font-family: "Bahnschrift", "Segoe UI", system-ui, -apple-system, sans-serif; line-height: 1.45; }
-  header { background: var(--asfalto); color: var(--asfalto-texto); border-bottom: 4px solid var(--faixa); }
-  .topo { max-width: 1200px; margin: 0 auto; padding: 14px 16px; display: flex; align-items: baseline;
-    justify-content: space-between; gap: 12px; flex-wrap: wrap; }
-  h1 { margin: 0; font-size: 22px; letter-spacing: .2px; }
-  #atualizado { font-size: 13px; opacity: .85; }
-  main { max-width: 1200px; margin: 0 auto; padding: 16px; }
-  .painel { background: var(--painel); border: 1px solid var(--linha); border-radius: 8px; padding: 14px 16px; margin-bottom: 14px; }
-  .painel h2 { margin: 0 0 2px; font-size: 16px; }
-  .painel p { margin: 0 0 10px; font-size: 13px; color: var(--tinta-2); }
-  /* régua de prazos */
-  #regua { display: grid; grid-template-columns: repeat(30, minmax(0, 1fr)); gap: 3px; align-items: end; height: 92px;
-    border-bottom: 2px solid var(--tinta); padding-bottom: 2px; }
-  .dia { display: flex; flex-direction: column; justify-content: flex-end; align-items: center; height: 100%;
-    cursor: pointer; border-radius: 3px; position: relative; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; }
-  .dia:hover { background: color-mix(in srgb, var(--faixa) 22%, transparent); }
-  .dia.sel { background: color-mix(in srgb, var(--faixa) 40%, transparent); outline: 2px solid var(--faixa); }
-  .dia .barra { width: 100%; max-width: 22px; background: var(--ok); border-radius: 2px 2px 0 0; min-height: 0; }
-  .dia.hoje .barra, .dia.amanha .barra { background: var(--alerta); }
-  .dia.cedo .barra { background: var(--atencao); }
-  .dia .n { font-size: 11px; font-weight: 600; min-height: 14px; }
-  .legenda-dias { display: grid; grid-template-columns: repeat(30, minmax(0, 1fr)); gap: 3px; margin-top: 3px; }
-  .legenda-dias span { text-align: center; font-size: 10px; color: var(--tinta-2); }
-  .legenda-dias span.fds { opacity: .5; }
-  /* filtros */
-  .filtros { display: grid; grid-template-columns: 1fr repeat(2, minmax(150px, 220px)); gap: 8px; margin-bottom: 8px; }
-  input[type=search], select { width: 100%; padding: 10px 12px; border: 1px solid var(--linha); border-radius: 6px;
-    background: var(--painel); color: var(--tinta); font: inherit; font-size: 15px; }
-  .opcoes { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 10px 2px 14px; font-size: 14px; }
-  .opcoes label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
-  .linha-resumo { display: flex; justify-content: space-between; align-items: center; margin: 0 2px 8px;
-    font-size: 14px; color: var(--tinta-2); gap: 8px; flex-wrap: wrap; }
-  #limpar { background: none; border: 1px solid var(--linha); border-radius: 6px; color: var(--tinta); padding: 4px 10px; cursor: pointer; font: inherit; font-size: 13px; }
-  /* cartões */
-  .item { background: var(--painel); border: 1px solid var(--linha); border-left: 5px solid var(--ok); border-radius: 8px;
-    padding: 12px 14px; margin-bottom: 10px; }
-  .item.hoje, .item.amanha { border-left-color: var(--alerta); }
-  .item.cedo { border-left-color: var(--atencao); }
-  .item.encerrada { opacity: .6; border-left-color: var(--linha); }
-  .item .cab { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; flex-wrap: wrap; }
-  .item .orgao { font-weight: 700; font-size: 15px; }
-  .item .prazo { font-size: 13px; font-weight: 700; white-space: nowrap; }
-  .item.hoje .prazo, .item.amanha .prazo { color: var(--alerta); }
-  .item.cedo .prazo { color: var(--atencao); }
-  .item .objeto { margin: 6px 0 8px; font-size: 14px; }
-  .meta { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 13px; color: var(--tinta-2); }
-  .tag { display: inline-block; font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 10px; margin-right: 6px;
-    background: var(--faixa); color: #1B2329; vertical-align: 1px; }
-  .tag.cinza { background: var(--linha); color: var(--tinta); }
-  .links { margin-top: 8px; font-size: 14px; display: flex; gap: 16px; flex-wrap: wrap; }
-  a { color: var(--link); }
-  .vazio { text-align: center; color: var(--tinta-2); padding: 40px 12px; }
-  #mais { display: block; margin: 12px auto 28px; padding: 10px 22px; border: 1px solid var(--linha); border-radius: 6px;
-    background: var(--painel); color: var(--tinta); cursor: pointer; font: inherit; }
-  .aviso { background: color-mix(in srgb, var(--atencao) 18%, var(--painel)); border: 1px solid var(--atencao);
-    border-radius: 8px; padding: 10px 14px; margin-bottom: 14px; font-size: 14px; }
-  @media (max-width: 720px) {
-    .filtros { grid-template-columns: 1fr; }
-    .legenda-dias span:not(.mostra) { visibility: hidden; }
-    #regua { height: 72px; }
-    h1 { font-size: 19px; }
+  html { background: var(--papel); }
+  body {
+    margin: 0; background: var(--papel); color: var(--tinta);
+    font: 15px/1.45 var(--fonte);
   }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  a { color: var(--link); }
+  :focus-visible { outline: 2px solid var(--foco); outline-offset: 2px; }
+  button, select, input { font: inherit; color: inherit; }
+
+  /* Barra superior */
+  .topo { background: var(--asfalto); color: var(--asfalto-texto); position: relative; }
+  .topo-in { max-width: 1280px; margin: 0 auto; padding: 14px 20px; display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+  .topo h1 { margin: 0; font-size: 20px; font-weight: 600; letter-spacing: .01em; }
+  .topo .estado { margin-left: auto; font-size: 13px; color: #B9C3C9; text-align: right; }
+  .topo .estado.erro { color: #FFB4AA; }
+  .btn { border: 1px solid #5B6A73; background: transparent; color: var(--asfalto-texto); padding: 6px 12px; border-radius: 3px; cursor: pointer; }
+  .btn:hover { background: #38444C; }
+  .btn:disabled { opacity: .5; cursor: default; }
+  .progresso { position: absolute; left: 0; bottom: 0; height: 3px; background: var(--faixa); width: 0; transition: width .4s linear; }
+
+  main { max-width: 1280px; margin: 0 auto; padding: 18px 20px 48px; }
+
+  /* Régua de prazos */
+  .regua-bloco { background: var(--painel); border: 1px solid var(--linha); padding: 12px 14px 10px; margin-bottom: 14px; }
+  .regua-bloco h2 { margin: 0 0 2px; font-size: 15px; font-weight: 600; }
+  .regua-bloco p { margin: 0 0 8px; font-size: 13px; color: var(--tinta-2); }
+  .regua-rolagem { overflow-x: auto; }
+  .regua { display: grid; grid-template-columns: repeat(31, minmax(24px, 1fr)); min-width: 780px; border-bottom: 2px solid var(--tinta); }
+  .dia { all: unset; box-sizing: border-box; cursor: pointer; display: flex; flex-direction: column; justify-content: flex-end; align-items: center;
+         height: 92px; position: relative; padding-bottom: 20px; border-left: 1px solid transparent; }
+  .dia.fds { background: color-mix(in srgb, var(--linha) 35%, transparent); }
+  .dia:hover { background: color-mix(in srgb, var(--faixa) 22%, transparent); }
+  .dia:focus-visible { outline: 2px solid var(--foco); outline-offset: -2px; }
+  .dia .n { font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; margin-bottom: 2px; min-height: 16px; }
+  .dia .barra { width: 10px; background: var(--tinta-2); min-height: 0; }
+  .dia.urgente .barra { background: var(--alerta); }
+  .dia.urgente .n { color: var(--alerta); }
+  .dia.marcado { background: var(--faixa); }
+  .dia.marcado .barra { background: var(--tinta); }
+  .dia.marcado .n { color: #1B2329; }
+  .dia::after { content: ""; position: absolute; bottom: 0; left: 50%; width: 1px; height: 6px; background: var(--tinta); }
+  .dia.eixo::after { height: 11px; width: 2px; }
+  .dia .rot { position: absolute; bottom: 2px; left: 0; right: 0; text-align: center; font-size: 11px; color: var(--tinta-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .dia.marcado .rot { color: #1B2329; font-weight: 600; }
+
+  /* Filtros */
+  .filtros { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; margin-bottom: 10px; }
+  .filtros input[type="search"], .filtros select {
+    background: var(--painel); border: 1px solid var(--linha); border-radius: 3px; padding: 6px 8px; min-height: 34px;
+  }
+  .filtros input[type="search"] { min-width: 240px; flex: 1 1 240px; }
+  .opcoes { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 14px; }
+  .opcoes label { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; }
+  .resumo { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; margin: 4px 0 8px; font-size: 14px; color: var(--tinta-2); }
+  .resumo strong { color: var(--tinta); font-variant-numeric: tabular-nums; }
+  .resumo .legenda::before { content: ""; display: inline-block; width: 4px; height: 14px; background: var(--faixa); margin-right: 6px; vertical-align: -2px; }
+  .resumo .btn { color: var(--tinta); border-color: var(--linha); margin-left: auto; }
+  .resumo .btn:hover { background: var(--painel); }
+
+  /* Lista */
+  table { width: 100%; border-collapse: collapse; background: var(--painel); border: 1px solid var(--linha); }
+  th { text-align: left; font-weight: 600; font-size: 13px; color: var(--tinta-2); padding: 8px 10px; border-bottom: 2px solid var(--tinta); white-space: nowrap; }
+  td { padding: 10px; border-bottom: 1px solid var(--linha); vertical-align: top; }
+  th.num, td.num { text-align: right; }
+  tr.nova td:first-child { box-shadow: inset 4px 0 0 var(--faixa); }
+  tr.descartada td { opacity: .55; }
+  td.prazo { white-space: nowrap; width: 112px; }
+  td.prazo .data { display: block; font-weight: 600; font-variant-numeric: tabular-nums; }
+  td.prazo .hora, td.prazo .falta { display: block; font-size: 13px; color: var(--tinta-2); font-variant-numeric: tabular-nums; }
+  td.prazo.urgente .falta { color: var(--alerta); font-weight: 600; }
+  td.prazo.encerrada .data { text-decoration: line-through; }
+  td.orgao { width: 230px; }
+  td.orgao strong { display: block; font-weight: 600; }
+  td.orgao span { font-size: 13px; color: var(--tinta-2); }
+  td.objeto .texto { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; cursor: pointer; }
+  tr.aberta td.objeto .texto { -webkit-line-clamp: unset; display: block; }
+  td.objeto .mod { display: block; margin-top: 4px; font-size: 13px; color: var(--tinta-2); }
+  td.objeto .obs { display: none; margin-top: 8px; }
+  tr.aberta td.objeto .obs { display: block; }
+  td.objeto textarea { width: 100%; min-height: 56px; background: var(--papel); border: 1px solid var(--linha); border-radius: 3px; padding: 6px 8px; font: inherit; color: inherit; resize: vertical; }
+  td.valor { white-space: nowrap; font-variant-numeric: tabular-nums; width: 130px; }
+  td.valor .sem { color: var(--tinta-2); font-size: 13px; }
+  td.acomp { width: 170px; }
+  td.acomp select, td.acomp input { width: 100%; background: var(--papel); border: 1px solid var(--linha); border-radius: 3px; padding: 5px 6px; margin-bottom: 6px; }
+  td.acomp select.st-participando { border-color: var(--ok); color: var(--ok); }
+  td.acomp select.st-analisando { border-color: var(--link); }
+  td.links { white-space: nowrap; width: 84px; font-size: 14px; }
+  td.links a { display: block; }
+
+  .vazio { padding: 28px 12px; text-align: center; color: var(--tinta-2); background: var(--painel); border: 1px solid var(--linha); }
+  .mais { display: block; margin: 12px auto 0; background: var(--painel); border: 1px solid var(--linha); padding: 8px 18px; border-radius: 3px; cursor: pointer; }
+  .aviso { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); background: var(--asfalto); color: var(--asfalto-texto); padding: 10px 16px; border-radius: 3px; max-width: 90vw; }
+  .aviso[hidden] { display: none; }
+
+  .entrada { position: fixed; inset: 0; background: color-mix(in srgb, var(--asfalto) 88%, transparent); display: flex; align-items: center; justify-content: center; padding: 20px; z-index: 5; }
+  .entrada[hidden] { display: none; }
+  .entrada form { background: var(--painel); border: 1px solid var(--linha); border-top: 6px solid var(--faixa); padding: 22px 22px 18px; width: min(380px, 100%); }
+  .entrada h2 { margin: 0 0 6px; font-size: 18px; }
+  .entrada p { margin: 0 0 12px; color: var(--tinta-2); font-size: 14px; }
+  .entrada input { width: 100%; background: var(--papel); border: 1px solid var(--linha); border-radius: 3px; padding: 8px; margin-bottom: 8px; }
+  .entrada .msg { color: var(--alerta); min-height: 20px; font-size: 14px; }
+  .entrada button { background: var(--asfalto); color: var(--asfalto-texto); border: 0; padding: 8px 18px; border-radius: 3px; cursor: pointer; }
+
+  @media (max-width: 900px) {
+    thead { display: none; }
+    table, tbody, tr, td { display: block; width: auto !important; }
+    tr { border-bottom: 2px solid var(--linha); padding: 8px 0; }
+    td { border: 0; padding: 4px 10px; }
+    td.num, td.valor { text-align: left; }
+    td.prazo .data, td.prazo .hora, td.prazo .falta { display: inline; margin-right: 8px; }
+    td.links a { display: inline; margin-right: 12px; }
+  }
+  @media (prefers-reduced-motion: reduce) { .progresso { transition: none; } }
 </style>
 </head>
 <body>
-<header><div class="topo"><h1>Radar de licitações</h1><span id="atualizado">Carregando…</span></div></header>
-<main>
-  <div id="aviso" class="aviso" hidden></div>
 
-  <section class="painel">
-    <h2>Encerramentos nos próximos 30 dias</h2>
+<header class="topo">
+  <div class="topo-in">
+    <h1>Radar de licitações</h1>
+    <div class="estado" id="estado" role="status" aria-live="polite">Carregando…</div>
+    <button class="btn" id="btnAtualizar" type="button">Atualizar agora</button>
+  </div>
+  <div class="progresso" id="progresso"></div>
+</header>
+
+<main>
+  <section class="regua-bloco" aria-labelledby="tituloRegua">
+    <h2 id="tituloRegua">Encerramentos nos próximos 30 dias</h2>
     <p>Cada coluna é um dia. Clique em um dia para listar só o que encerra nele.</p>
-    <div id="regua"></div>
-    <div class="legenda-dias" id="legenda"></div>
+    <div class="regua-rolagem"><div class="regua" id="regua"></div></div>
   </section>
 
-  <div class="filtros">
-    <input type="search" id="busca" placeholder="Buscar por objeto, órgão ou cidade" aria-label="Buscar">
-    <select id="uf" aria-label="Estado"><option value="">Todos os estados</option></select>
-    <select id="modalidade" aria-label="Modalidade"><option value="">Todas as modalidades</option></select>
-  </div>
-  <div class="opcoes">
-    <label><input type="checkbox" id="soRelevantes" checked> Só relevantes</label>
-    <label><input type="checkbox" id="ocultarEncerradas" checked> Ocultar encerradas</label>
-    <label><input type="checkbox" id="soRodoviarios"> Só órgãos rodoviários</label>
-  </div>
+  <section class="filtros" aria-label="Filtros">
+    <input type="search" id="fBusca" placeholder="Buscar por objeto, órgão ou cidade" aria-label="Buscar">
+    <select id="fUf" aria-label="Estado"><option value="">Todos os estados</option></select>
+    <select id="fMod" aria-label="Modalidade"><option value="">Todas as modalidades</option></select>
+    <select id="fSit" aria-label="Acompanhamento">
+      <option value="">Qualquer acompanhamento</option>
+      <option value="novas">Só novas</option>
+      <option value="__sem">Sem marcação</option>
+      <option value="analisando">Em análise</option>
+      <option value="participando">Participando</option>
+      <option value="descartada">Descartadas</option>
+    </select>
+    <div class="opcoes">
+      <label><input type="checkbox" id="fRelevantes" checked> Só relevantes</label>
+      <label><input type="checkbox" id="fEncerradas" checked> Ocultar encerradas</label>
+      <label><input type="checkbox" id="fDescartadas" checked> Ocultar descartadas</label>
+      <label><input type="checkbox" id="fRodoviarios"> Só órgãos rodoviários</label>
+    </div>
+  </section>
 
-  <div class="linha-resumo"><span id="resumo"></span><button id="limpar" hidden>Limpar filtro de dia</button></div>
+  <div class="resumo" id="resumo"></div>
   <div id="lista"></div>
-  <button id="mais" hidden>Mostrar mais</button>
 </main>
 
+<div class="aviso" id="aviso" hidden role="alert"></div>
+
+<div class="entrada" id="entrada" hidden>
+  <form id="formEntrada">
+    <h2>Radar de licitações</h2>
+    <p>Digite o código de acesso do time. Você só precisa fazer isso uma vez neste navegador.</p>
+    <label class="sr" for="entradaCodigo">Código de acesso</label>
+    <input type="password" id="entradaCodigo" autocomplete="current-password" placeholder="Código de acesso">
+    <div class="msg" id="entradaMsg" role="alert"></div>
+    <button type="submit">Entrar</button>
+  </form>
+</div>
+
 <script>
-(function () {
-  "use strict";
-  var $ = function (id) { return document.getElementById(id); };
-  var DADOS = [], diaSel = null, mostrando = 50, PASSO = 50;
-  var DIA_MS = 86400000;
+"use strict";
+const SITUACOES = [["", "Sem marcação"], ["analisando", "Em análise"], ["participando", "Participando"], ["descartada", "Descartada"]];
+const F = { busca: "", uf: "", mod: "", sit: "", relevantes: true, ocultarEncerradas: true, ocultarDescartadas: true, rodoviarios: false, dia: null, limite: 100 };
+let DADOS = { itens: [], status: { itens: {}, visto_ate: null }, meta: {}, ufs: [] };
+let timer = null;
+let avisoTimer = null;
 
-  function norm(s) { return String(s == null ? "" : s).normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase(); }
-  // "2026-10-25T14:00:00" -> Date local (sem converter fuso: o PNCP já manda horário de Brasília)
-  function dataDe(iso) {
-    var m = /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2}))?/.exec(iso || "");
-    return m ? new Date(+m[1], +m[2] - 1, +m[3], +(m[4] || 0), +(m[5] || 0)) : null;
-  }
-  function chaveDia(d) { return d.getFullYear() + "-" + ("0" + (d.getMonth() + 1)).slice(-2) + "-" + ("0" + d.getDate()).slice(-2); }
-  function inicioDoDia(d) { return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }
-  function fmtData(d) { return d ? ("0" + d.getDate()).slice(-2) + "/" + ("0" + (d.getMonth() + 1)).slice(-2) + "/" + d.getFullYear() : ""; }
-  function fmtHora(d) { return d ? ("0" + d.getHours()).slice(-2) + ":" + ("0" + d.getMinutes()).slice(-2) : ""; }
-  function fmtValor(v) { return typeof v === "number" ? v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : ""; }
-  function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
-  function urlSegura(u) { return /^https?:\/\//i.test(u || "") ? u : ""; }
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const norm = s => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+const urlSegura = u => /^https?:\/\//i.test(u || "") ? u : "";
+const dois = n => String(n).padStart(2, "0");
+const inicioDia = d => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+const chaveDia = d => d.getFullYear() + "-" + dois(d.getMonth() + 1) + "-" + dois(d.getDate());
+const fmtData = d => dois(d.getDate()) + "/" + dois(d.getMonth() + 1) + "/" + d.getFullYear();
+const fmtHora = d => dois(d.getHours()) + "h" + dois(d.getMinutes());
+const diasAte = d => Math.round((inicioDia(d) - inicioDia(new Date())) / 86400000);
+const moeda = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 
-  function hoje() { return inicioDoDia(new Date()); }
-  function diasAte(d) { return Math.round((inicioDoDia(d) - hoje()) / DIA_MS); }
+function aviso(texto) {
+  const el = $("aviso");
+  el.textContent = texto; el.hidden = false;
+  clearTimeout(avisoTimer);
+  avisoTimer = setTimeout(() => { el.hidden = true; }, 6000);
+}
 
-  function classeDe(it) {
-    var d = dataDe(it.encerramento);
-    if (!d) return "";
-    if (d < new Date()) return "encerrada";
-    var n = diasAte(d);
-    return n <= 0 ? "hoje" : n === 1 ? "amanha" : n <= 5 ? "cedo" : "";
-  }
-  function textoPrazo(it) {
-    var d = dataDe(it.encerramento);
-    if (!d) return "Sem prazo informado";
-    if (d < new Date()) return "Encerrada em " + fmtData(d);
-    var n = diasAte(d), h = " às " + fmtHora(d);
-    if (n <= 0) return "Encerra HOJE" + h;
-    if (n === 1) return "Encerra amanhã" + h;
-    return "Encerra em " + n + " dias (" + fmtData(d) + h + ")";
-  }
+const CHAVE_CODIGO = "radar-codigo";
+function lerCodigo() { try { return localStorage.getItem(CHAVE_CODIGO) || ""; } catch (e) { return ""; } }
+function guardarCodigo(c) { try { localStorage.setItem(CHAVE_CODIGO, c); } catch (e) { /* sem armazenamento */ } }
 
-  function filtrados(ignorarDia) {
-    var q = norm($("busca").value.trim()), uf = $("uf").value, mod = $("modalidade").value;
-    var soRel = $("soRelevantes").checked, ocEnc = $("ocultarEncerradas").checked, soRod = $("soRodoviarios").checked;
-    var agora = new Date();
-    return DADOS.filter(function (it) {
-      if (soRel && !it.relevante) return false;
-      if (soRod && !it.rodoviario) return false;
-      if (uf && it.uf !== uf) return false;
-      if (mod && it.modalidade !== mod) return false;
-      var d = dataDe(it.encerramento);
-      if (ocEnc && d && d < agora) return false;
-      if (!ignorarDia && diaSel) { if (!d || chaveDia(d) !== diaSel) return false; }
-      if (q && norm(it._texto).indexOf(q) < 0) return false;
-      return true;
+// Endereço do Radar no Google (termina em /exec). Vazio = a página está sendo servida pelo próprio Google.
+const URL_API = "https://script.google.com/macros/s/AKfycbw4NdX4IPNhUGg434w7rBiiFxipSpwGAvlXqsRkppCNEE8rxaGBnjyExOX77xdELy0r/exec";
+
+function tratarResposta(r) {
+  if (r && r.erro === "codigo") { pedirCodigo(r.mensagem); throw new Error("codigo"); }
+  if (r && r.erro) throw new Error(r.erro);
+  return r;
+}
+
+// Fala com o Radar. Mesmas rotas nos dois modos: dentro do Google (google.script.run)
+// ou hospedado em outro lugar, como o GitHub Pages (fetch no endereço /exec).
+function chamar(rota, corpo) {
+  if (window.google && google.script && google.script.run) {
+    return new Promise((resolve, reject) => {
+      google.script.run
+        .withSuccessHandler(r => { try { resolve(tratarResposta(r)); } catch (e) { reject(e); } })
+        .withFailureHandler(e => reject(new Error(String((e && e.message) || e))))
+        .api(rota, corpo || {}, lerCodigo());
     });
   }
+  if (!URL_API) return Promise.reject(new Error("fora do Google"));
+  return fetch(URL_API, {
+    method: "POST",
+    headers: { "Content-Type": "text/plain;charset=utf-8" },   // evita a checagem prévia (CORS)
+    body: JSON.stringify({ rota: rota, corpo: corpo || {}, codigo: lerCodigo() }),
+  }).then(r => { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); }).then(tratarResposta);
+}
 
-  function desenharRegua() {
-    var base = filtrados(true), cont = {}, i, max = 1;
-    base.forEach(function (it) {
-      var d = dataDe(it.encerramento);
-      if (d && d >= new Date()) { var k = chaveDia(d); cont[k] = (cont[k] || 0) + 1; }
-    });
-    var h = hoje(), regua = "", leg = "";
-    for (i = 0; i < 30; i++) { var k0 = chaveDia(new Date(h.getTime() + i * DIA_MS)); if ((cont[k0] || 0) > max) max = cont[k0]; }
-    var sem = ["D", "S", "T", "Q", "Q", "S", "S"];
-    for (i = 0; i < 30; i++) {
-      var d = new Date(h.getFullYear(), h.getMonth(), h.getDate() + i), k = chaveDia(d), n = cont[k] || 0;
-      var cls = "dia" + (i === 0 ? " hoje" : i === 1 ? " amanha" : i <= 5 ? " cedo" : "") + (k === diaSel ? " sel" : "");
-      regua += '<button type="button" class="' + cls + '" data-dia="' + k + '" title="' + fmtData(d) + ": " + n + (n === 1 ? " licitação" : " licitações") + '">' +
-        '<span class="n">' + (n || "") + '</span><span class="barra" style="height:' + Math.round((n / max) * 58) + 'px"></span></button>';
-      var fds = d.getDay() === 0 || d.getDay() === 6;
-      leg += '<span class="' + (fds ? "fds " : "") + (i % 5 === 0 ? "mostra" : "") + '">' + d.getDate() + "<br>" + sem[d.getDay()] + "</span>";
+let pedindoCodigo = false;
+function pedirCodigo(mensagem) {
+  $("entradaMsg").textContent = mensagem || "";
+  $("entrada").hidden = false;
+  if (!pedindoCodigo) { pedindoCodigo = true; $("entradaCodigo").focus(); }
+  $("estado").textContent = "Digite o código de acesso";
+}
+
+function salvarFiltros() {
+  try { localStorage.setItem("radar-filtros", JSON.stringify({ relevantes: F.relevantes, ocultarEncerradas: F.ocultarEncerradas, ocultarDescartadas: F.ocultarDescartadas, rodoviarios: F.rodoviarios, uf: F.uf, mod: F.mod })); } catch (e) { /* sem armazenamento */ }
+}
+function lerFiltros() {
+  try {
+    const s = JSON.parse(localStorage.getItem("radar-filtros") || "null");
+    if (s) Object.assign(F, s);
+  } catch (e) { /* ignora */ }
+}
+
+function ehNova(it) {
+  const visto = DADOS.status.visto_ate;
+  return !!visto && it.primeira_vez > visto;
+}
+function marcacao(it) { return DADOS.status.itens[it.id] || {}; }
+
+function filtrar(ignorarDia) {
+  const agora = new Date();
+  const q = norm(F.busca);
+  return DADOS.itens.filter(it => {
+    if (F.relevantes && !it.relevante) return false;
+    if (F.rodoviarios && !it.rodoviario) return false;
+    if (F.uf && it.uf !== F.uf) return false;
+    if (F.mod && it.modalidade !== F.mod) return false;
+    const st = marcacao(it).situacao || "";
+    if (F.ocultarDescartadas && st === "descartada") return false;
+    if (F.sit === "novas") { if (!ehNova(it)) return false; }
+    else if (F.sit === "__sem") { if (st) return false; }
+    else if (F.sit && st !== F.sit) return false;
+    const enc = it.encerramento ? new Date(it.encerramento) : null;
+    if (F.ocultarEncerradas && enc && enc < agora) return false;
+    if (!ignorarDia && F.dia && (!enc || chaveDia(enc) !== F.dia)) return false;
+    if (q) {
+      const palheiro = norm([it.objeto, it.orgao, it.unidade, it.municipio, it.numero + "/" + it.ano].join(" "));
+      if (!palheiro.includes(q)) return false;
     }
-    $("regua").innerHTML = regua;
-    $("legenda").innerHTML = leg;
-  }
-
-  function cartao(it) {
-    var cl = classeDe(it), links = "";
-    var lp = urlSegura(it.link_pncp), lo = urlSegura(it.link_origem);
-    if (lp) links += '<a href="' + esc(lp) + '" target="_blank" rel="noopener">Ver no PNCP</a>';
-    if (lo) links += '<a href="' + esc(lo) + '" target="_blank" rel="noopener">Sistema de origem</a>';
-    var novo = it.primeira_vez && (new Date() - dataDe(it.primeira_vez)) < 2 * DIA_MS;
-    var meta = [];
-    if (it.uf || it.municipio) meta.push(esc([it.municipio, it.uf].filter(Boolean).join(" / ")));
-    if (it.modalidade) meta.push(esc(it.modalidade));
-    if (it.numero) meta.push("Nº " + esc(it.numero) + (it.ano ? "/" + esc(it.ano) : ""));
-    if (it.valor != null) meta.push(esc(fmtValor(it.valor)));
-    if (it.unidade) meta.push(esc(it.unidade));
-    return '<article class="item ' + cl + '"><div class="cab"><div class="orgao">' +
-      (novo ? '<span class="tag">NOVA</span>' : "") + (it.rodoviario ? '<span class="tag cinza">RODOVIÁRIO</span>' : "") + esc(it.orgao) +
-      '</div><div class="prazo">' + esc(textoPrazo(it)) + '</div></div>' +
-      '<div class="objeto">' + esc(it.objeto) + '</div><div class="meta">' + meta.map(function (m) { return "<span>" + m + "</span>"; }).join("") + "</div>" +
-      (links ? '<div class="links">' + links + "</div>" : "") + "</article>";
-  }
-
-  function desenhar() {
-    desenharRegua();
-    var lista = filtrados(false);
-    $("resumo").textContent = lista.length + (lista.length === 1 ? " licitação" : " licitações") +
-      (diaSel ? " encerrando em " + fmtData(dataDe(diaSel + "T00:00:00")) : "");
-    $("limpar").hidden = !diaSel;
-    $("lista").innerHTML = lista.length
-      ? lista.slice(0, mostrando).map(cartao).join("")
-      : '<div class="vazio">Nenhuma licitação com esses filtros.</div>';
-    $("mais").hidden = lista.length <= mostrando;
-    if (!$("mais").hidden) $("mais").textContent = "Mostrar mais (" + (lista.length - mostrando) + " restantes)";
-  }
-
-  function recomeca() { mostrando = PASSO; desenhar(); }
-
-  function preencherSelect(id, valores) {
-    var s = $(id);
-    valores.forEach(function (v) { var o = document.createElement("option"); o.value = v; o.textContent = v; s.appendChild(o); });
-  }
-
-  function iniciar(json) {
-    DADOS = (json.itens || []).map(function (it) { it._texto = [it.objeto, it.orgao, it.municipio, it.unidade, it.uf].join(" "); return it; });
-    DADOS.sort(function (a, b) { return (a.encerramento || "9999") < (b.encerramento || "9999") ? -1 : 1; });
-    var g = dataDe(json.gerado_em);
-    $("atualizado").textContent = g ? "Atualizado em " + fmtData(g) + " às " + fmtHora(g) : "Atualização desconhecida";
-    if (g && (new Date() - g) > 2 * DIA_MS) {
-      $("aviso").hidden = false;
-      $("aviso").textContent = "Atenção: a última coleta foi há mais de 2 dias. A lista pode estar desatualizada.";
-    } else if (json.consultas_com_erro) {
-      $("aviso").hidden = false;
-      $("aviso").textContent = json.consultas_com_erro + " consultas ao PNCP falharam na última coleta; algumas licitações podem estar faltando. A próxima rodada tenta de novo.";
-    }
-    var ufs = {}, mods = {};
-    DADOS.forEach(function (it) { if (it.uf) ufs[it.uf] = 1; if (it.modalidade) mods[it.modalidade] = 1; });
-    preencherSelect("uf", Object.keys(ufs).sort());
-    preencherSelect("modalidade", Object.keys(mods).sort());
-    desenhar();
-  }
-
-  $("regua").addEventListener("click", function (e) {
-    var b = e.target.closest(".dia"); if (!b) return;
-    diaSel = diaSel === b.getAttribute("data-dia") ? null : b.getAttribute("data-dia");
-    recomeca();
+    return true;
   });
-  $("limpar").addEventListener("click", function () { diaSel = null; recomeca(); });
-  $("mais").addEventListener("click", function () { mostrando += PASSO; desenhar(); });
-  var t; $("busca").addEventListener("input", function () { clearTimeout(t); t = setTimeout(recomeca, 150); });
-  ["uf", "modalidade", "soRelevantes", "ocultarEncerradas", "soRodoviarios"].forEach(function (id) { $(id).addEventListener("change", recomeca); });
+}
 
-  fetch("licitacoes.json?v=" + Date.now(), { cache: "no-store" })
-    .then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
-    .then(iniciar)
-    .catch(function () {
-      $("atualizado").textContent = "Sem dados ainda";
-      $("lista").innerHTML = '<div class="vazio">A primeira coleta ainda não rodou. Assim que ela terminar, a lista aparece aqui.</div>';
+function ordenar(lista) {
+  return lista.slice().sort((a, b) => {
+    const ea = a.encerramento || "9999", eb = b.encerramento || "9999";
+    return ea < eb ? -1 : ea > eb ? 1 : 0;
+  });
+}
+
+function renderRegua() {
+  const base = filtrar(true);
+  const hoje = inicioDia(new Date());
+  const cont = new Array(31).fill(0);
+  base.forEach(it => {
+    if (!it.encerramento) return;
+    const k = Math.round((inicioDia(new Date(it.encerramento)) - hoje) / 86400000);
+    if (k >= 0 && k <= 30) cont[k]++;
+  });
+  const maximo = Math.max(1, ...cont);
+  let html = "";
+  for (let k = 0; k <= 30; k++) {
+    const d = new Date(hoje); d.setDate(d.getDate() + k);
+    const chave = chaveDia(d);
+    const n = cont[k];
+    const altura = n ? Math.max(6, Math.round(n / maximo * 46)) : 0;
+    const cls = ["dia", (d.getDay() === 0 || d.getDay() === 6) ? "fds" : "", k <= 3 ? "urgente" : "", k % 7 === 0 ? "eixo" : "", F.dia === chave ? "marcado" : ""].join(" ");
+    const rotulo = (k % 7 === 0 || F.dia === chave) ? dois(d.getDate()) + "/" + dois(d.getMonth() + 1) : "";
+    const leitura = n + (n === 1 ? " licitação encerra" : " licitações encerram") + " em " + fmtData(d);
+    html += `<button type="button" class="${cls}" data-dia="${chave}" aria-pressed="${F.dia === chave}" aria-label="${esc(leitura)}" title="${esc(leitura)}">` +
+      `<span class="n">${n || ""}</span><span class="barra" style="height:${altura}px"></span><span class="rot">${rotulo}</span></button>`;
+  }
+  $("regua").innerHTML = html;
+}
+
+function linhaHTML(it) {
+  const m = marcacao(it);
+  const enc = it.encerramento ? new Date(it.encerramento) : null;
+  let classePrazo = "", falta = "sem prazo informado", data = "—", hora = "";
+  if (enc) {
+    const dias = diasAte(enc);
+    data = fmtData(enc); hora = fmtHora(enc);
+    if (enc < new Date()) { classePrazo = "encerrada"; falta = "encerrada"; }
+    else if (dias === 0) { classePrazo = "urgente"; falta = "hoje"; }
+    else if (dias === 1) { classePrazo = "urgente"; falta = "amanhã"; }
+    else { classePrazo = dias <= 3 ? "urgente" : ""; falta = "em " + dias + " dias"; }
+  }
+  const local = [it.unidade, [it.municipio, it.uf].filter(Boolean).join("/")].filter(Boolean).join(", ");
+  const valor = (typeof it.valor === "number") ? moeda.format(it.valor) : '<span class="sem">não informado</span>';
+  const opcoes = SITUACOES.map(([v, t]) => `<option value="${v}"${(m.situacao || "") === v ? " selected" : ""}>${t}</option>`).join("");
+  const lPncp = urlSegura(it.link_pncp), lOrig = urlSegura(it.link_origem);
+  const nova = ehNova(it);
+  return `<tr data-id="${esc(it.id)}" class="${nova ? "nova" : ""} ${m.situacao === "descartada" ? "descartada" : ""}">
+    <td class="prazo ${classePrazo}">${nova ? '<span class="sr">Nova. </span>' : ""}<span class="data">${data}</span><span class="hora">${hora}</span><span class="falta">${falta}</span></td>
+    <td class="orgao"><strong>${esc(it.orgao)}</strong><span>${esc(local)}</span></td>
+    <td class="objeto"><div class="texto" title="Clique para ver o texto completo e anotar">${esc(it.objeto)}</div>
+      <span class="mod">${esc(it.modalidade)} ${esc(it.numero)}${it.ano ? "/" + esc(it.ano) : ""}${it.situacao ? ", " + esc(it.situacao) : ""}</span>
+      <div class="obs"><label class="sr" for="obs-${esc(it.id)}">Observação</label><textarea id="obs-${esc(it.id)}" data-campo="obs" placeholder="Observação sobre esta licitação">${esc(m.obs || "")}</textarea></div></td>
+    <td class="num valor">${valor}</td>
+    <td class="acomp"><select data-campo="situacao" class="st-${esc(m.situacao || "")}" aria-label="Acompanhamento">${opcoes}</select>
+      <input type="text" data-campo="responsavel" value="${esc(m.responsavel || "")}" placeholder="Responsável" aria-label="Responsável" maxlength="80"></td>
+    <td class="links">${lPncp ? `<a href="${esc(lPncp)}" target="_blank" rel="noopener">Edital no PNCP</a>` : ""}${lOrig ? `<a href="${esc(lOrig)}" target="_blank" rel="noopener">Sistema do órgão</a>` : ""}</td>
+  </tr>`;
+}
+
+function renderResumo(lista) {
+  const novas = DADOS.itens.filter(ehNova).length;
+  const agora = new Date();
+  const sete = lista.filter(it => { if (!it.encerramento) return false; const e = new Date(it.encerramento); const d = diasAte(e); return e >= agora && d <= 7; }).length;
+  let html = `<span><strong>${lista.length}</strong> na lista</span><span><strong>${sete}</strong> encerram em até 7 dias</span>`;
+  html += `<span class="legenda"><strong>${novas}</strong> novas desde a última marcação</span>`;
+  if (F.dia) html += `<button class="btn" type="button" id="btnLimparDia">Limpar filtro de dia</button>`;
+  else if (novas) html += `<button class="btn" type="button" id="btnVisto">Marcar novas como vistas</button>`;
+  $("resumo").innerHTML = html;
+}
+
+function render() {
+  renderRegua();
+  const lista = ordenar(filtrar(false));
+  renderResumo(lista);
+  const alvo = $("lista");
+  if (!DADOS.itens.length) {
+    alvo.innerHTML = `<div class="vazio">Nenhuma licitação coletada ainda. A primeira coleta leva alguns minutos; acompanhe o andamento no topo da página.</div>`;
+    return;
+  }
+  if (!lista.length) {
+    alvo.innerHTML = `<div class="vazio">Nenhuma licitação com estes filtros. Desmarque “Só relevantes” ou limpe a busca para ampliar.</div>`;
+    return;
+  }
+  const parte = lista.slice(0, F.limite);
+  const abertas = new Set([...document.querySelectorAll("tr.aberta")].map(tr => tr.dataset.id));
+  alvo.innerHTML = `<table><thead><tr><th>Prazo</th><th>Órgão</th><th>Objeto</th><th class="num">Valor estimado</th><th>Acompanhamento</th><th>Links</th></tr></thead><tbody>${parte.map(linhaHTML).join("")}</tbody></table>` +
+    (lista.length > parte.length ? `<button class="mais" type="button" id="btnMais">Mostrar mais ${Math.min(100, lista.length - parte.length)} de ${lista.length - parte.length} restantes</button>` : "");
+  alvo.querySelectorAll("tbody tr").forEach(tr => { if (abertas.has(tr.dataset.id)) tr.classList.add("aberta"); });
+}
+
+function preencherSelects() {
+  const ufs = [...new Set([...(DADOS.ufs || []), ...DADOS.itens.map(i => i.uf)].filter(Boolean))].sort();
+  const mods = [...new Set(DADOS.itens.map(i => i.modalidade).filter(Boolean))].sort();
+  $("fUf").innerHTML = `<option value="">Todos os estados</option>` + ufs.map(u => `<option value="${esc(u)}">${esc(u)}</option>`).join("");
+  $("fMod").innerHTML = `<option value="">Todas as modalidades</option>` + mods.map(u => `<option value="${esc(u)}">${esc(u)}</option>`).join("");
+  $("fUf").value = F.uf; $("fMod").value = F.mod;
+}
+
+function textoEstado(p) {
+  const el = $("estado");
+  el.classList.remove("erro");
+  if (p && p.rodando) {
+    el.textContent = p.feitos ? "Consultando o PNCP: " + p.feitos + " de " + p.total : "Preparando a coleta (pode levar 1 minuto)…";
+  } else if (p && p.falhou_tudo) {
+    el.classList.add("erro");
+    el.textContent = p.mensagem || "Não foi possível consultar o PNCP.";
+  } else if (DADOS.meta && DADOS.meta.ultima_coleta) {
+    const d = new Date(DADOS.meta.ultima_coleta);
+    let t = "Atualizado em " + fmtData(d) + " às " + fmtHora(d);
+    if (DADOS.meta.consultas_com_erro) t += ". " + DADOS.meta.consultas_com_erro + " consultas falharam; atualize de novo.";
+    el.textContent = t;
+  } else {
+    el.textContent = "Ainda sem coleta";
+  }
+}
+
+async function carregar() {
+  DADOS = await chamar("/api/dados");
+  preencherSelects();
+  render();
+}
+
+function pintarProgresso(p) {
+  const barra = $("progresso");
+  barra.style.width = (p && p.rodando && p.total) ? Math.round(p.feitos / p.total * 100) + "%" : "0";
+  $("btnAtualizar").disabled = !!(p && p.rodando);
+}
+
+async function acompanhar() {
+  clearTimeout(timer);
+  let p;
+  try { p = await chamar("/api/progresso"); }
+  catch (e) { $("estado").textContent = "Não foi possível falar com o Radar. Recarregue a página."; $("estado").classList.add("erro"); return; }
+  pintarProgresso(p);
+  textoEstado(p);
+  if (p.rodando) { timer = setTimeout(acompanhar, 5000); return; }
+  if (p.fim) { await carregar(); textoEstado(p); }
+}
+
+async function atualizar(forcar) {
+  try {
+    await chamar("/api/atualizar", { forcar: !!forcar });
+    acompanhar();
+  } catch (e) { aviso("Não foi possível iniciar a coleta. Tente de novo em instantes."); }
+}
+
+async function salvarMarcacao(id, campos) {
+  const novo = Object.assign({}, DADOS.status.itens[id] || {}, campos);
+  DADOS.status.itens[id] = novo;
+  try { await chamar("/api/status", Object.assign({ id: id }, novo)); }
+  catch (e) { aviso("Não foi possível salvar a marcação. Tente de novo em instantes."); }
+}
+
+function ligarEventos() {
+  $("btnAtualizar").addEventListener("click", () => atualizar(true));
+  $("fBusca").addEventListener("input", e => { F.busca = e.target.value; F.limite = 100; render(); });
+  $("fUf").addEventListener("change", e => { F.uf = e.target.value; F.limite = 100; salvarFiltros(); render(); });
+  $("fMod").addEventListener("change", e => { F.mod = e.target.value; F.limite = 100; salvarFiltros(); render(); });
+  $("fSit").addEventListener("change", e => { F.sit = e.target.value; F.limite = 100; render(); });
+  [["fRelevantes", "relevantes"], ["fEncerradas", "ocultarEncerradas"], ["fDescartadas", "ocultarDescartadas"], ["fRodoviarios", "rodoviarios"]].forEach(([id, chave]) => {
+    $(id).checked = F[chave];
+    $(id).addEventListener("change", e => { F[chave] = e.target.checked; F.limite = 100; salvarFiltros(); render(); });
+  });
+
+  $("regua").addEventListener("click", e => {
+    const b = e.target.closest(".dia"); if (!b) return;
+    F.dia = (F.dia === b.dataset.dia) ? null : b.dataset.dia; F.limite = 100; render();
+  });
+
+  $("resumo").addEventListener("click", async e => {
+    if (e.target.id === "btnLimparDia") { F.dia = null; render(); }
+    if (e.target.id === "btnVisto") {
+      try { const r = await chamar("/api/visto", {}); DADOS.status.visto_ate = r.visto_ate; render(); }
+      catch (err) { aviso("Não foi possível salvar. Tente de novo em instantes."); }
+    }
+  });
+
+  const lista = $("lista");
+  lista.addEventListener("click", e => {
+    if (e.target.id === "btnMais") { F.limite += 100; render(); return; }
+    const texto = e.target.closest(".texto");
+    if (texto) texto.closest("tr").classList.toggle("aberta");
+  });
+  lista.addEventListener("change", e => {
+    const campo = e.target.dataset.campo; if (!campo) return;
+    const id = e.target.closest("tr").dataset.id;
+    salvarMarcacao(id, { [campo]: e.target.value }).then(() => { if (campo === "situacao") render(); else renderResumo(ordenar(filtrar(false))); });
+  });
+}
+
+let eventosLigados = false;
+
+async function partida() {
+  try { await carregar(); }
+  catch (e) {
+    if (e.message === "codigo") return;   // a tela de código já foi aberta
+    $("estado").textContent = "Não foi possível falar com o Radar. Recarregue a página.";
+    $("estado").classList.add("erro");
+    return;
+  }
+  textoEstado(null);
+  await atualizar(false);
+}
+
+async function iniciar() {
+  if (!(window.google && google.script && google.script.run) && !URL_API) {
+    $("estado").textContent = "Abra pelo link do Radar";
+    $("estado").classList.add("erro");
+    $("lista").innerHTML = `<div class="vazio">Esta página só funciona pelo link do Radar (o endereço que termina em <strong>/exec</strong>). Peça o link a quem instalou.</div>`;
+    $("btnAtualizar").disabled = true;
+    return;
+  }
+  lerFiltros();
+  if (!eventosLigados) {
+    eventosLigados = true;
+    ligarEventos();
+    $("formEntrada").addEventListener("submit", e => {
+      e.preventDefault();
+      const c = $("entradaCodigo").value.trim();
+      if (!c) return;
+      guardarCodigo(c);
+      $("entrada").hidden = true;
+      $("entradaCodigo").value = "";
+      partida();
     });
-})();
+    // Uso em equipe: a cada minuto traz as marcações e licitações dos colegas,
+    // sem mexer na tela enquanto você digita ou escolhe algo.
+    setInterval(async () => {
+      if (document.hidden || !$("entrada").hidden) return;
+      const ativo = document.activeElement;
+      if (ativo && /^(INPUT|TEXTAREA|SELECT)$/.test(ativo.tagName)) return;
+      try {
+        const p = await chamar("/api/progresso");
+        if (p.rodando) return;
+        await carregar();
+        textoEstado(null);
+      } catch (e) { /* tenta de novo no próximo ciclo */ }
+    }, 60000);
+  }
+  await partida();
+}
+iniciar();
 </script>
 </body>
 </html>
