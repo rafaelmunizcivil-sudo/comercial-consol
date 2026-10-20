@@ -14,6 +14,7 @@ Modos:
 """
 import json
 import os
+import threading
 import re
 import sys
 import time
@@ -61,7 +62,8 @@ DIAS_A_FRENTE = 180        # consulta propostas que encerram ate daqui a N dias
 DIAS_GUARDAR = 30          # quanto tempo manter licitacoes ja encerradas
 DIAS_ALERTA_PRAZO = 3      # o aviso diario de prazos olha ate N dias a frente
 TAMANHO_PAGINA = 50        # a API aceita no minimo 10; se recusar 50, cai para 10
-PARALELO = 6               # consultas ao mesmo tempo
+PARALELO = 2               # consultas ao mesmo tempo (o PNCP limita a velocidade: erro 429)
+INTERVALO = 0.6            # segundos minimos entre duas requisicoes (somando todas as consultas)
 TEMPO_MAXIMO_MIN = 70      # nunca passar disso (o GitHub corta em 90)
 PAGINAS_MAXIMO = 200
 MINIMO_DE_SUCESSO = 0.5    # com menos de 50% das consultas ok, nao sobrescreve a lista
@@ -169,9 +171,26 @@ def linha_md(r):
 
 # ------------------------------------------------------------------- PNCP
 
-def pedir(url, tentativas=4):
+_trava = threading.Lock()
+_proxima = [0.0]       # instante em que a proxima requisicao pode sair (vale para todas as consultas)
+
+
+def _esperar_vez(extra=0.0):
+    """Todas as consultas passam por aqui: mantem o ritmo e respeita pausas pedidas pelo PNCP."""
+    with _trava:
+        if extra:
+            _proxima[0] = max(_proxima[0], time.time() + extra)
+        agora_t = time.time()
+        espera = max(0.0, _proxima[0] - agora_t)
+        _proxima[0] = max(agora_t, _proxima[0]) + INTERVALO
+    if espera:
+        time.sleep(espera)
+
+
+def pedir(url, tentativas=7):
     ultimo = None
     for i in range(tentativas):
+        _esperar_vez()
         try:
             req = urllib.request.Request(url, headers={
                 "Accept": "application/json", "User-Agent": "CONSOL-RadarLicitacoes/2.0"})
@@ -182,7 +201,14 @@ def pedir(url, tentativas=4):
             ultimo = e
             if e.code == 400:
                 raise
-            if e.code in (429, 500, 502, 503, 504) and i < tentativas - 1:
+            if e.code == 429 and i < tentativas - 1:
+                try:
+                    pausa = float(e.headers.get("Retry-After") or 0)
+                except (TypeError, ValueError):
+                    pausa = 0
+                _esperar_vez(extra=max(pausa, 20 * (i + 1)))   # todas as consultas param juntas
+                continue
+            if e.code in (500, 502, 503, 504) and i < tentativas - 1:
                 time.sleep(3 * (i + 1))
                 continue
             raise
@@ -256,26 +282,36 @@ def coletar():
     limite_encerradas = iso(agora() - timedelta(days=DIAS_GUARDAR))
     coletados, ok, erros = {}, 0, []
 
-    with ThreadPoolExecutor(max_workers=PARALELO) as ex:
-        futuros = {ex.submit(coletar_par, u, m, data_final, prazo_final): (u, m) for u, m in pares}
-        for f in as_completed(futuros):
-            u, m = futuros[f]
-            try:
-                registros = f.result()
-            except Exception as e:  # noqa: BLE001 - registrar e seguir
-                erros.append("%s/%s: %s" % (u, m, e))
-                continue
-            ok += 1
-            for r in registros:
-                rec = normalizar(r)
-                enc = rec["encerramento"]
-                if isinstance(enc, str) and enc < limite_encerradas:
+    def rodada(lista):
+        nonlocal ok
+        falhas = []
+        with ThreadPoolExecutor(max_workers=PARALELO) as ex:
+            futuros = {ex.submit(coletar_par, u, m, data_final, prazo_final): (u, m) for u, m in lista}
+            for f in as_completed(futuros):
+                u, m = futuros[f]
+                try:
+                    registros = f.result()
+                except Exception as e:  # noqa: BLE001 - registrar e seguir
+                    falhas.append((u, m, str(e)))
                     continue
-                texto = sem_acento(rec["objeto"] + " " + rec["orgao"])
-                rec["relevante"] = bool(rx_inc and rx_inc.search(texto)) and not (rx_exc and rx_exc.search(texto))
-                rec["rodoviario"] = bool(RX_ORGAO_RODOVIARIO.search(sem_acento(rec["orgao"])))
-                if rec["relevante"] or rec["rodoviario"]:
-                    coletados[rec["id"]] = rec
+                ok += 1
+                for r in registros:
+                    rec = normalizar(r)
+                    enc = rec["encerramento"]
+                    if isinstance(enc, str) and enc < limite_encerradas:
+                        continue
+                    texto = sem_acento(rec["objeto"] + " " + rec["orgao"])
+                    rec["relevante"] = bool(rx_inc and rx_inc.search(texto)) and not (rx_exc and rx_exc.search(texto))
+                    rec["rodoviario"] = bool(RX_ORGAO_RODOVIARIO.search(sem_acento(rec["orgao"])))
+                    if rec["relevante"] or rec["rodoviario"]:
+                        coletados[rec["id"]] = rec
+        return falhas
+
+    falhas = rodada(pares)
+    if falhas and time.time() < prazo_final:      # uma segunda chance para o que falhou
+        print("Repetindo %d consulta(s) que falharam..." % len(falhas))
+        falhas = rodada([(u, m) for u, m, _ in falhas])
+    erros = ["%s/%s: %s" % f for f in falhas]
 
     print("Consultas ok: %d de %d (%.0f s). Itens guardados desta coleta: %d"
           % (ok, len(pares), time.time() - inicio, len(coletados)))
