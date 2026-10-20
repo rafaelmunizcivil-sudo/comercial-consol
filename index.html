@@ -56,6 +56,36 @@
   .btn:disabled { opacity: .5; cursor: default; }
   .progresso { position: absolute; left: 0; bottom: 0; height: 3px; background: var(--faixa); width: 0; transition: width .4s linear; }
 
+  /* Botões de órgãos */
+  .orgaos { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 16px; }
+  .orgaos button { background: #1F5FA8; color: #fff; border: 2px solid transparent; border-radius: 3px; padding: 3px 10px; font-size: 12px; font-weight: 600; cursor: pointer; line-height: 1.5; }
+  .orgaos button:hover { background: #174C87; }
+  .orgaos button[aria-pressed="true"] { background: #0F3A6B; border-color: var(--faixa); }
+  .orgaos button .q { font-weight: 400; opacity: .85; margin-left: 4px; }
+  .orgaos button.zero { opacity: .55; }
+  /* Painel do órgão */
+  .painel-cab { background: var(--painel); border: 1px solid var(--linha); border-left: 4px solid #1F5FA8; padding: 12px 16px; margin-bottom: 10px; display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: center; }
+  .painel-cab h2 { margin: 0; font-size: 18px; }
+  .painel-cab .sub { color: var(--tinta-2); font-size: 13px; flex: 1 1 260px; }
+  .painel-cab .btn { color: var(--tinta); border-color: var(--linha); }
+  .painel-cab .btn:hover { background: var(--papel); }
+  .cartao { display: grid; grid-template-columns: 130px 1fr; gap: 6px 18px; background: var(--painel); border: 1px solid var(--linha); padding: 12px 16px; margin-bottom: 8px; }
+  .cartao .c-prazo { border-right: 1px solid var(--linha); padding-right: 12px; font-variant-numeric: tabular-nums; }
+  .cartao .c-prazo .data { display: block; font-size: 18px; font-weight: 600; }
+  .cartao .c-prazo .hora { color: var(--tinta-2); font-size: 13px; }
+  .cartao .c-prazo .falta { display: block; font-size: 13px; margin-top: 2px; color: var(--tinta-2); }
+  .cartao .c-prazo.urgente .falta { color: var(--alerta); font-weight: 600; }
+  .cartao .c-prazo.encerrada .data { text-decoration: line-through; color: var(--tinta-2); }
+  .cartao.nova { box-shadow: inset 4px 0 0 var(--faixa); }
+  .cartao .c-objeto { font-size: 15px; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; cursor: pointer; }
+  .cartao.aberta .c-objeto { display: block; }
+  .cartao .c-meta { margin-top: 4px; font-size: 13px; color: var(--tinta-2); display: flex; flex-wrap: wrap; gap: 2px 16px; }
+  .cartao .c-meta strong { color: var(--tinta); }
+  .cartao .c-links { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; font-size: 13px; }
+  .cartao .c-links a.edital { background: #1F5FA8; color: #fff; text-decoration: none; padding: 4px 10px; border-radius: 3px; font-weight: 600; }
+  .cartao .c-links a.edital:hover { background: #174C87; }
+  .cartao .c-links .fonte { color: var(--tinta-2); }
+  @media (max-width: 640px) { .cartao { grid-template-columns: 1fr; } .cartao .c-prazo { border-right: 0; border-bottom: 1px solid var(--linha); padding: 0 0 6px; } }
   main { max-width: 1280px; margin: 0 auto; padding: 18px 20px 48px; }
 
   /* Régua de prazos */
@@ -168,6 +198,7 @@
 </header>
 
 <main>
+  <nav class="orgaos" id="orgaos" aria-label="Órgãos"></nav>
   <div class="aviso-dados" id="avisoDados" hidden></div>
 
   <section class="regua-bloco" aria-labelledby="tituloRegua">
@@ -200,7 +231,50 @@ const FONTES = [
   "https://raw.githubusercontent.com/rafaelmunizcivil-sudo/comercial-consol/main/licitacoes.json",
   "licitacoes.json",
 ];
-const F = { busca: "", uf: "", mod: "", relevantes: true, ocultarEncerradas: true, rodoviarios: false, novas: false, dia: null, limite: 100 };
+// Botões de órgãos. "uf" restringe ao estado; "rx" procura no nome do órgão/unidade (sem acento, minúsculo).
+// "sites" são os links oficiais do órgão (aparecem no painel). Para acrescentar um: { t: "Texto do link", u: "https://..." }.
+const ORGAOS = [
+  { id: "dnit", nome: "DNIT", desc: "Departamento Nacional de Infraestrutura de Transportes", rx: /departamento nacional de infraestrutura|\bdnit\b/, sites: [{ t: "Editais de licitações (superintendências)", u: "https://www.gov.br/dnit/pt-br/assuntos/licitacoes/superintendencias/editais-de-licitacoes" }] },
+  { id: "derac", nome: "DER-AC", desc: "Departamento de Estradas de Rodagem do Acre", uf: "AC", rx: /estradas de rodagem|\bder\b|\bder-ac\b|departamento de estradas/, sites: [{ t: "Site do órgão", u: "https://deracre.ac.gov.br/" }] },
+  { id: "deral", nome: "DER-AL", desc: "Departamento de Estradas de Rodagem de Alagoas", uf: "AL", rx: /estradas de rodagem|\bder\b|\bder-al\b|departamento de estradas/, sites: [{ t: "Site do órgão", u: "https://www.der.al.gov.br/" }] },
+  { id: "seinfraap", nome: "SEINFRA-AP", desc: "Infraestrutura do Amapá", uf: "AP", rx: /infraestrutura|seinfra|sinfra|seinf|obras|transportes/, sites: [{ t: "Site do governo", u: "https://amapa.gov.br/" }] },
+  { id: "seinfraam", nome: "SEINFRA-AM", desc: "Infraestrutura do Amazonas", uf: "AM", rx: /infraestrutura|seinfra|sinfra|seinf|obras|transportes/, sites: [{ t: "Portal de compras (e-Compras AM)", u: "https://www.e-compras.am.gov.br/publico/" }] },
+  { id: "ba", nome: "Infra BA", desc: "Secretaria de Infraestrutura da Bahia", uf: "BA", rx: /infraestrutura|seinfra|derba|\bder\b/, sites: [{ t: "Secretaria de Infraestrutura", u: "https://www.ba.gov.br/infraestrutura/" },{ t: "ComprasNet BA", u: "https://www.comprasnet.ba.gov.br/" }] },
+  { id: "derdf", nome: "DER-DF", desc: "Departamento de Estradas de Rodagem do Distrito Federal", uf: "DF", rx: /estradas de rodagem|\bder\b|\bder-df\b|departamento de estradas/, sites: [{ t: "Site do órgão", u: "https://www.der.df.gov.br/" }] },
+  { id: "deres", nome: "DER-ES", desc: "Departamento de Edificações e de Estradas de Rodagem do Espírito Santo", uf: "ES", rx: /estradas de rodagem|\bder\b|\bder-es\b|departamento de estradas/, sites: [{ t: "Licitações (portal de serviços)", u: "https://portalservicos.der.es.gov.br/Licitacao/Licitacoes" }] },
+  { id: "goinfra", nome: "GOINFRA", desc: "Agência Goiana de Infraestrutura e Transportes", uf: "GO", rx: /goinfra|agencia goiana de infraestrutura/, sites: [{ t: "Portal de licitações (SGL)", u: "https://sgl.goinfra.go.gov.br/portal_licitacao/" },{ t: "Site do órgão", u: "https://www.goinfra.go.gov.br/" }] },
+  { id: "sinframa", nome: "SINFRA-MA", desc: "Infraestrutura do Maranhão", uf: "MA", rx: /infraestrutura|seinfra|sinfra|seinf|obras|transportes/, sites: [{ t: "Portal de compras do MA", u: "https://www.compras.ma.gov.br/portal/" }] },
+  { id: "sinframt", nome: "SINFRA-MT", desc: "Secretaria de Estado de Infraestrutura e Logística do Mato Grosso", uf: "MT", rx: /infraestrutura|sinfra/, sites: [{ t: "Site do órgão", u: "https://www.sinfra.mt.gov.br/" }] },
+  { id: "agesul", nome: "AGESUL", desc: "Agência Estadual de Gestão de Empreendimentos (MS)", uf: "MS", rx: /agesul|gestao de empreendimentos|infraestrutura|obras/, sites: [{ t: "Site do órgão", u: "https://www.agesul.ms.gov.br/" }] },
+  { id: "dermg", nome: "DER-MG", desc: "Departamento de Edificações e Estradas de Rodagem de Minas Gerais", uf: "MG", rx: /estradas de rodagem|\bder\b|\bder-mg\b|departamento de estradas/, sites: [{ t: "Pregões", u: "https://der.mg.gov.br/transparencia/licitacoes/pregoes/502-licitacoes" },{ t: "Concorrências", u: "https://www.der.mg.gov.br/transparencia/licitacoes/concorrencias" }] },
+  { id: "derpb", nome: "DER-PB", desc: "Departamento de Estradas de Rodagem da Paraíba", uf: "PB", rx: /estradas de rodagem|\bder\b|\bder-pb\b|departamento de estradas/, sites: [{ t: "Site do órgão", u: "https://der.pb.gov.br/" }] },
+  { id: "derpr", nome: "DER-PR", desc: "Departamento de Estradas de Rodagem do Paraná", uf: "PR", rx: /estradas de rodagem|\bder\b|\bder-pr\b|departamento de estradas/, sites: [{ t: "Licitações", u: "https://www.der.pr.gov.br/Pagina/Licitacoes" },{ t: "Site do órgão", u: "https://www.der.pr.gov.br/" }] },
+  { id: "amep", nome: "AMEP-PR", desc: "AMEP (Paraná)", uf: "PR", rx: /\bamep\b|metropolitan/, sites: [{ t: "Concorrências", u: "https://www.amep.pr.gov.br/concorrencia" }] },
+  { id: "derpe", nome: "DER-PE", desc: "Departamento de Estradas de Rodagem de Pernambuco", uf: "PE", rx: /estradas de rodagem|\bder\b|\bder-pe\b|departamento de estradas/, sites: [{ t: "Site do órgão", u: "https://www.der.pe.gov.br/" }] },
+  { id: "seinfrapi", nome: "SEINFRA-PI", desc: "Infraestrutura do Piauí", uf: "PI", rx: /infraestrutura|seinfra|sinfra|seinf|obras|transportes/, sites: [{ t: "Site do governo", u: "https://www.pi.gov.br/" }] },
+  { id: "derrj", nome: "DER-RJ", desc: "Departamento de Estradas de Rodagem do Rio de Janeiro", uf: "RJ", rx: /estradas de rodagem|\bder\b|\bder-rj\b|departamento de estradas/, sites: [{ t: "Site do órgão", u: "https://www.der.rj.gov.br/" }] },
+  { id: "dernrn", nome: "DER-RN", desc: "Departamento de Estradas de Rodagem do Rio Grande do Norte", uf: "RN", rx: /estradas de rodagem|\bder\b|\bder-rn\b|departamento de estradas/, sites: [{ t: "Site do órgão", u: "https://www.der.rn.gov.br/" }] },
+  { id: "daer", nome: "DAER-RS", desc: "Departamento Autônomo de Estradas de Rodagem do Rio Grande do Sul", uf: "RS", rx: /daer|estradas de rodagem|\bder\b/, sites: [{ t: "Site do órgão", u: "https://www.daer.rs.gov.br/inicial" }] },
+  { id: "derro", nome: "DER-RO", desc: "Departamento de Estradas de Rodagem de Rondônia", uf: "RO", rx: /estradas de rodagem|\bder\b|\bder-ro\b|departamento de estradas/, sites: [{ t: "Site do órgão", u: "https://rondonia.ro.gov.br/der/" }] },
+  { id: "seinfrr", nome: "SEINF-RR", desc: "Infraestrutura de Roraima", uf: "RR", rx: /infraestrutura|seinfra|sinfra|seinf|obras|transportes/, sites: [{ t: "Portal do governo", u: "https://portal.rr.gov.br/" }] },
+  { id: "sie", nome: "SIE-SC", desc: "Secretaria de Estado da Infraestrutura de Santa Catarina", uf: "SC", rx: /infraestrutura|deinfra|\bsie\b/, sites: [{ t: "Site da SIE", u: "https://www.sie.sc.gov.br/" },{ t: "Portal de compras (SEA-SC)", u: "https://portal.doe.sea.sc.gov.br/v2.44.07/#/portal" }] },
+  { id: "dersp", nome: "DER-SP", desc: "Departamento de Estradas de Rodagem de São Paulo", uf: "SP", rx: /estradas de rodagem|\bder\b|\bder-sp\b|departamento de estradas/, sites: [{ t: "Site do órgão", u: "https://www.der.sp.gov.br/der" }] },
+  { id: "derse", nome: "DER-SE", desc: "Departamento de Estradas de Rodagem de Sergipe", uf: "SE", rx: /estradas de rodagem|\bder\b|\bder-se\b|departamento de estradas/, sites: [{ t: "Acervo de licitações", u: "https://der.se.gov.br/acervo_licitacoes/" }] },
+  { id: "seinfto", nome: "SEINF-TO", desc: "Infraestrutura do Tocantins", uf: "TO", rx: /infraestrutura|seinfra|sinfra|seinf|obras|transportes/, sites: [{ t: "Site do governo", u: "https://www.to.gov.br/" }] },
+  { id: "artemig", nome: "ARTEMIG", desc: "Agência Reguladora de Transportes do Estado de Minas Gerais", uf: "MG", rx: /artemig|reguladora de transportes/, sites: [] },
+];
+const ORGAO_OUTROS = { id: "outros", nome: "Outros órgãos", desc: "Demais órgãos que publicaram licitações relevantes" };
+function orgaoDe(it) {
+  if (it._org) return it._org;
+  const t = norm((it.orgao || "") + " " + (it.unidade || ""));
+  let achou = ORGAO_OUTROS.id;
+  for (const o of ORGAOS) {
+    if (o.uf && o.uf !== it.uf) continue;
+    if (o.rx.test(t)) { achou = o.id; break; }
+  }
+  it._org = achou; return achou;
+}
+const F = { orgao: null, busca: "", uf: "", mod: "", relevantes: true, ocultarEncerradas: true, rodoviarios: false, novas: false, dia: null, limite: 100 };
 let DADOS = { itens: [], gerado_em: null, consultas: 0, consultas_com_erro: 0 };
 let VISITA_ANTERIOR = null;   // quando você abriu o Radar da vez anterior (só neste navegador)
 
@@ -231,11 +305,12 @@ function marcarVisita() {
 
 const ehNova = it => !!VISITA_ANTERIOR && !!it.primeira_vez && it.primeira_vez > VISITA_ANTERIOR;
 
-function filtrar(ignorarDia) {
+function filtrar(ignorarDia, ignorarOrgao) {
   const agora = new Date();
   const q = norm(F.busca);
   return DADOS.itens.filter(it => {
     if (F.relevantes && !it.relevante) return false;
+    if (!ignorarOrgao && F.orgao && orgaoDe(it) !== F.orgao) return false;
     if (F.rodoviarios && !it.rodoviario) return false;
     if (F.uf && it.uf !== F.uf) return false;
     if (F.mod && it.modalidade !== F.mod) return false;
@@ -308,6 +383,40 @@ function linhaHTML(it) {
   </tr>`;
 }
 
+function renderOrgaos() {
+  const base = filtrar(false, true);
+  const cont = {};
+  base.forEach(it => { const k = orgaoDe(it); cont[k] = (cont[k] || 0) + 1; });
+  const lista = ORGAOS.concat([ORGAO_OUTROS]);
+  $("orgaos").innerHTML = `<button type="button" data-org="" aria-pressed="${!F.orgao}">Todos<span class="q">${base.length}</span></button>` +
+    lista.map(o => `<button type="button" data-org="${o.id}" class="${cont[o.id] ? "" : "zero"}" aria-pressed="${F.orgao === o.id}" title="${esc(o.desc)}">${esc(o.nome)}<span class="q">${cont[o.id] || 0}</span></button>`).join("");
+}
+
+function cartaoHTML(it) {
+  const enc = it.encerramento ? new Date(it.encerramento) : null;
+  let cls = "", falta = "sem prazo informado", data = "—", hora = "";
+  if (enc) {
+    const dias = diasAte(enc); data = fmtData(enc); hora = fmtHora(enc);
+    if (enc < new Date()) { cls = "encerrada"; falta = "encerrada"; }
+    else if (dias === 0) { cls = "urgente"; falta = "encerra hoje"; }
+    else if (dias === 1) { cls = "urgente"; falta = "encerra amanhã"; }
+    else { cls = dias <= 3 ? "urgente" : ""; falta = "encerra em " + dias + " dias"; }
+  }
+  const local = [it.unidade, [it.municipio, it.uf].filter(Boolean).join("/")].filter(Boolean).join(", ");
+  const valor = (typeof it.valor === "number") ? moeda.format(it.valor) : "não informado";
+  const lPncp = urlSegura(it.link_pncp), lOrig = urlSegura(it.link_origem);
+  const links = (lPncp ? `<a class="edital" href="${esc(lPncp)}" target="_blank" rel="noopener">Abrir edital no PNCP</a>` : "") +
+    (lOrig ? `<a href="${esc(lOrig)}" target="_blank" rel="noopener">Sistema do órgão</a>` : "") +
+    (lPncp || lOrig ? `<span class="fonte">Fonte: PNCP (pncp.gov.br)</span>` : `<span class="fonte">Sem link disponível</span>`);
+  const nova = ehNova(it);
+  return `<article class="cartao ${nova ? "nova" : ""}" data-id="${esc(it.id)}">
+    <div class="c-prazo ${cls}">${nova ? '<span class="sr">Nova. </span>' : ""}<span class="data">${data}</span><span class="hora">${hora ? "até " + hora : ""}</span><span class="falta">${falta}</span></div>
+    <div><div class="c-objeto" title="Clique para ver o texto completo">${esc(it.objeto)}</div>
+      <div class="c-meta"><span><strong>Valor:</strong> ${esc(valor)}</span><span>${esc(it.modalidade)} ${esc(it.numero)}${it.ano ? "/" + esc(it.ano) : ""}${it.situacao ? ", " + esc(it.situacao) : ""}</span><span>${esc(it.orgao)}${local ? " · " + esc(local) : ""}</span></div>
+      <div class="c-links">${links}</div></div>
+  </article>`;
+}
+
 function renderResumo(lista) {
   const novas = DADOS.itens.filter(ehNova).length;
   const agora = new Date();
@@ -320,6 +429,7 @@ function renderResumo(lista) {
 }
 
 function render() {
+  renderOrgaos();
   renderRegua();
   const lista = ordenar(filtrar(false));
   renderResumo(lista);
@@ -329,10 +439,20 @@ function render() {
     return;
   }
   if (!lista.length) {
-    alvo.innerHTML = `<div class="vazio">Nenhuma licitação com estes filtros. Desmarque “Só relevantes” ou limpe a busca para ampliar.</div>`;
+    alvo.innerHTML = (F.orgao ? `<div class="painel-cab"><h2>${esc((ORGAOS.concat([ORGAO_OUTROS]).find(x => x.id === F.orgao) || {}).nome)}</h2><span class="sub"></span><button class="btn" type="button" id="btnFechar">Fechar painel</button></div>` : "") + `<div class="vazio">Nenhuma licitação com estes filtros. Desmarque “Só relevantes” ou limpe a busca para ampliar.</div>`;
     return;
   }
   const parte = lista.slice(0, F.limite);
+  if (F.orgao) {
+    const o = ORGAOS.concat([ORGAO_OUTROS]).find(x => x.id === F.orgao);
+    const sites = (o && o.sites || []).filter(x => urlSegura(x.u));
+    alvo.innerHTML = `<div class="painel-cab"><h2>${esc(o.nome)}</h2><span class="sub">${esc(o.desc)}. ${lista.length} licitação(ões) com os filtros atuais.</span>` +
+      sites.map(x => `<a href="${esc(x.u)}" target="_blank" rel="noopener">${esc(x.t)}</a>`).join("") +
+      `<button class="btn" type="button" id="btnFechar">Fechar painel</button></div>` +
+      parte.map(cartaoHTML).join("") +
+      (lista.length > parte.length ? `<button class="mais" type="button" id="btnMais">Mostrar mais ${Math.min(100, lista.length - parte.length)} de ${lista.length - parte.length} restantes</button>` : "");
+    return;
+  }
   const abertas = new Set([...document.querySelectorAll("tr.aberta")].map(tr => tr.dataset.id));
   alvo.innerHTML = `<table><thead><tr><th>Prazo</th><th>Órgão</th><th>Objeto</th><th class="num">Valor estimado</th><th>Links</th></tr></thead><tbody>${parte.map(linhaHTML).join("")}</tbody></table>` +
     (lista.length > parte.length ? `<button class="mais" type="button" id="btnMais">Mostrar mais ${Math.min(100, lista.length - parte.length)} de ${lista.length - parte.length} restantes</button>` : "");
@@ -391,6 +511,10 @@ function ligarEventos() {
     $(id).checked = F[chave];
     $(id).addEventListener("change", e => { F[chave] = e.target.checked; F.limite = 100; salvarFiltros(); render(); });
   });
+  $("orgaos").addEventListener("click", e => {
+    const b = e.target.closest("button"); if (!b) return;
+    F.orgao = b.dataset.org || null; F.dia = null; F.limite = 100; render();
+  });
   $("regua").addEventListener("click", e => {
     const b = e.target.closest(".dia"); if (!b) return;
     F.dia = (F.dia === b.dataset.dia) ? null : b.dataset.dia; F.limite = 100; render();
@@ -401,6 +525,9 @@ function ligarEventos() {
   });
   $("lista").addEventListener("click", e => {
     if (e.target.id === "btnMais") { F.limite += 100; render(); return; }
+    if (e.target.id === "btnFechar") { F.orgao = null; render(); return; }
+    const obj = e.target.closest(".c-objeto");
+    if (obj) { obj.closest(".cartao").classList.toggle("aberta"); return; }
     const texto = e.target.closest(".texto");
     if (texto) texto.closest("tr").classList.toggle("aberta");
   });
