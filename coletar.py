@@ -70,6 +70,10 @@ PALAVRAS_EXCLUIR = [
     "mobiliario", "ar condicionado", "centro cultural", "hospital", "escola", "creche",
     "chaveiro", "vigilancia", "telefonia", "copeira", "ambulancia", "seguro", "plano de saude", "licenca de uso", "aquisicao", "cafe",
     "papel higienico", "cartoes de memoria", "curadoria", "descartavel", "diarias",
+    # edificacoes e arquitetura: fora do escopo (infraestrutura)
+    "arquitet", "enfermaria", "centro cirurgico", "ambulatori", "saude", "climatizacao", "unidade basica",
+    "universidade", "campus", "museu", "teatro", "ginasio", "quadra poliesportiva", "estadio", "cemiterio",
+    "predio", "edificio", "paisagismo",
 ]
 
 DIAS_A_FRENTE = 180        # consulta propostas que encerram ate daqui a N dias

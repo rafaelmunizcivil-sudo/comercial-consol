@@ -358,11 +358,12 @@ const F = { todos: false, painelUf: false, orgao: null, busca: "", uf: "", mod: 
 // Os três serviços da CONSOL: o tipo vem de palavras do objeto da licitação.
 const SERVICOS = [
   { id: "monitoramento", nome: "Monitoramento", rx: /monitor|instrumenta|auscult|inspec/ },
-  // Projetos: só projeto básico / executivo (ou elaboração de projeto) de RODOVIA, sem execução de obra/serviço e sem ruas.
+  // Projetos: só projeto básico / executivo (ou elaboração de projeto) de RODOVIA, sem execução de obra/serviço, sem ruas e sem arquitetura/edificações.
   { id: "projetos", nome: "Projetos", rx: { test: t => /projetos?\s+(basicos?|executivos?)|basico\s+e\s+executivo|elaboracao\s+de\s+projetos?|anteprojeto/.test(t)
       && /rodovi|estrada|\b(br|mg|sp|pr|go|ba|rj|es|sc|rs|mt|ms|pe|ce|ma|pa|pi|rn|pb|se|al|to|ro|ac|am|ap|rr|df|lmg|amg)[- ]?\d{2,3}\b|trecho|pavimenta|restaura|duplica|ponte|viaduto|obras? de arte|contorno|acesso rodoviario|\bkm\b|interseca|trevo/.test(t)
       && !/execucao\s+(d[aeo]s?\s+)?(obras?|servicos?)|e\s+execucao|execucao\s+e\s|obras?\s+e\s+servicos|contratacao\s+integrada|semi-?integrada/.test(t)
-      && !/\bruas?\b|\bavenidas?\b|\bav\.|urbaniza|vias?\s+urbanas?|paralelepipedo|calcad|\bbairros?\b|\bpracas?\b|\bloteamento/.test(t) } },
+      && !/\bruas?\b|\bavenidas?\b|\bav\.|urbaniza|vias?\s+urbanas?|paralelepipedo|calcad|\bbairros?\b|\bpracas?\b|\bloteamento/.test(t)
+      && !/arquitet|edifica|hospital|saude|enfermaria|ambulatori|climatizacao|\bpredios?\b|escola|universidade|campus/.test(t) } },
   { id: "supervisao", nome: "Supervisão", rx: /supervis|fiscaliza|gerenciament|gerenciador|acompanhamento (tecnico|de obra)|apoio tecnico/ },
 ];
 function servicosDe(it) {
