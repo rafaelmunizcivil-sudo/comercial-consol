@@ -1,3 +1,34 @@
+name: Coletar licitações
+
+on:
+  schedule:
+    - cron: "0 9 * * *"
+    - cron: "0 15 * * *"
+    - cron: "0 21 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: coletar
+  cancel-in-progress: false
+
+jobs:
+  coletar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Coletar no PNCP
+        run: python coletar.py
+
       - name: Guardar a lista no repositório
         run: |
           git config user.name "radar-bot"
@@ -20,3 +51,21 @@
             sleep 5
           done
           exit 1
+
+      - name: Avisar licitações novas
+        if: ${{ hashFiles('novas.md') != '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue create --title "Novas licitações encontradas" --body-file novas.md
+
+      - name: Montar aviso de prazos
+        if: github.event_name == 'schedule' && github.event.schedule == '0 9 * * *'
+        run: python coletar.py --prazos
+
+      - name: Avisar prazos
+        if: ${{ github.event_name == 'schedule' && github.event.schedule == '0 9 * * *' && hashFiles('prazos.md') != '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue create --title "Prazos chegando" --body-file prazos.md
