@@ -358,7 +358,9 @@ const F = { todos: false, painelUf: false, orgao: null, busca: "", uf: "", mod: 
 // Os três serviços da CONSOL: o tipo vem de palavras do objeto da licitação.
 const SERVICOS = [
   { id: "monitoramento", nome: "Monitoramento", rx: /monitor|instrumenta|auscult|inspec/ },
-  { id: "projetos", nome: "Projetos", rx: /\bprojetos?\b|anteprojeto|estudos? (de|e|para)\b|topograf|viabilidade|levantamento/ },
+  // Projetos: só projeto básico / projeto executivo (ou elaboração de projeto) quando o objeto é de rodovia.
+  { id: "projetos", nome: "Projetos", rx: { test: t => /projetos?\s+(basicos?|executivos?)|basico\s+e\s+executivo|elaboracao\s+de\s+projetos?|anteprojeto/.test(t)
+      && /rodovi|estrada|\b(br|mg|sp|pr|go|ba|rj|es|sc|rs|mt|ms|pe|ce|ma|pa|pi|rn|pb|se|al|to|ro|ac|am|ap|rr|df|lmg|amg)[- ]?\d{2,3}\b|trecho|pavimenta|restaura|duplica|ponte|viaduto|obras? de arte|contorno|acesso rodoviario|\bkm\b|interseca|trevo|via urbana|marginal/.test(t) } },
   { id: "supervisao", nome: "Supervisão", rx: /supervis|fiscaliza|gerenciament|gerenciador|acompanhamento (tecnico|de obra)|apoio tecnico/ },
 ];
 function servicosDe(it) {
