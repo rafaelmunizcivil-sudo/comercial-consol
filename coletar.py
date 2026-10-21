@@ -573,6 +573,64 @@ def coletar_dermg():
         return None
 
 
+# ------------------------------------------------------------------- DER-PR (site proprio)
+# Pagina "Licitacoes em andamento": blocos de texto (Publicacao, Objeto, Valor estimado, GMS).
+# A pagina nao traz data da sessao nem link por edital (o detalhe fica no Compras Parana).
+
+DERPR_URL = "https://www.der.pr.gov.br/Pagina/Licitacoes-em-andamento"
+DERPR_ORGAO = "DEPARTAMENTO DE ESTRADAS DE RODAGEM DO PARANA - DER-PR"
+RX_DERPR = re.compile(
+    r"(\d{2}/\d{2}/\d{4})\s+(?:Objeto\s*:?\s*)?((?:(?!\d{2}/\d{2}/\d{4}).){10,1800}?)\s+"
+    r"Valor\s+estimado\s*:?\s*(R\$\s*[\d.]+,\d{2}|[A-Za-zÀ-ú]+)\s+"
+    r"GMS\s*:?\s*(\d+)\s*/\s*(\d{4})"
+    r"(?:\s+((?:Concorr[êe]ncia|Preg[ãa]o|Dispensa|Inexigibilidade|Tomada|Credenciamento|Chamamento|Di[áa]logo)"
+    r"[^()]{0,40}(?:\([^)]{0,90}\))?))?", re.I)
+
+
+def interpretar_derpr(html):
+    t = _texto_da_pagina(html)
+    itens = []
+    for m in RX_DERPR.finditer(t):
+        pub, objeto, val, num, ano, mod = m.groups()
+        objeto = re.sub(r"^(Objeto\s*:?\s*)", "", objeto.strip(), flags=re.I).strip(" :")
+        v = None
+        mv = re.search(r"([\d.]+,\d{2})", val)
+        if mv:
+            v = float(mv.group(1).replace(".", "").replace(",", "."))
+        itens.append({
+            "id": "derpr-%s-%s" % (num, ano),
+            "orgao": DERPR_ORGAO, "unidade": "", "uf": "PR", "municipio": "",
+            "objeto": objeto,
+            "modalidade": (mod or "Licitação").strip(),
+            "situacao": "Em andamento (publicado em %s)" % pub,
+            "numero": num, "ano": int(ano),
+            "abertura": None, "encerramento": None, "valor": v,
+            "link_pncp": "", "link_origem": DERPR_URL,
+            "fonte": "site do DER-PR", "_casar": r"estradas de rodagem do parana|\bder\b",
+        })
+    return itens
+
+
+def coletar_derpr():
+    """Licitacoes em andamento do DER-PR, ou None se o site nao respondeu."""
+    try:
+        arq = os.environ.get("RADAR_MOCK_DERPR")
+        if arq:
+            with open(arq, "r", encoding="utf-8") as f:
+                html = f.read()
+        else:
+            html = _ler_pagina(DERPR_URL)
+        itens = interpretar_derpr(html)
+        print("DER-PR (site proprio): %d licitacao(oes) em andamento lida(s)." % len(itens))
+        if not itens:
+            print("  aviso: a pagina do DER-PR abriu, mas nenhuma licitacao foi reconhecida (o formato pode ter mudado).")
+            return None      # nao apaga o que ja estava guardado
+        return itens
+    except Exception as e:  # noqa: BLE001 - nunca derrubar a coleta do PNCP por causa de um site
+        print("DER-PR (site proprio): nao foi possivel ler (%s). A coleta segue so com o PNCP." % e)
+        return None
+
+
 # ------------------------------------------------------------------- modos
 
 RX_SERVICOS, RX_CONTEXTOS, RX_EXCLUIR = montar_regex(SERVICOS), montar_regex(CONTEXTOS), montar_regex(PALAVRAS_EXCLUIR)
@@ -631,13 +689,14 @@ def coletar():
     erros = ["%s/%s: %s" % f for f in falhas]
 
     # Fontes que nao estao no PNCP (sites proprios dos orgaos)
-    extras = (coletar_goinfra() or []) + (coletar_dermg() or [])
+    lista_derpr = coletar_derpr()
+    extras = (coletar_goinfra() or []) + (coletar_dermg() or []) + (lista_derpr or [])
     for rec in extras:
         casar = rec.pop("_casar", "")
         num = re.sub(r"\D", "", str(rec["numero"]).split(" ")[0]).lstrip("0")
         if casar and any((re.sub(r"\D", "", str(r["numero"]).split("/")[0]).lstrip("0"), r["ano"]) == (num, rec["ano"])
                          and r["uf"] == rec["uf"] and re.search(casar, sem_acento(r["orgao"]))
-                         for r in coletados.values() if not str(r["id"]).startswith(("goinfra-", "dermg-"))):
+                         for r in coletados.values() if not str(r["id"]).startswith(("goinfra-", "dermg-", "derpr-"))):
             continue    # a mesma licitacao ja veio do PNCP
         classificar(rec)
         if rec["relevante"] or rec["rodoviario"]:
@@ -654,6 +713,9 @@ def coletar():
     anterior = ler_json(ARQUIVO, {})
     antigos = {r["id"]: classificar(r) for r in lista_de_itens(anterior) if r.get("id")}   # reaplica as regras atuais
     primeira = not antigos
+    if lista_derpr:     # a pagina do DER-PR so lista o que esta aberto e nao tem prazo: o que sumiu dela saiu da lista
+        for id_ in [i for i in antigos if str(i).startswith("derpr-") and i not in coletados]:
+            del antigos[id_]
     agora_s = iso(agora())
     novas = []
     for id_, rec in coletados.items():
