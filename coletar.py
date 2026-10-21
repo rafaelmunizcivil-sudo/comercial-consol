@@ -412,7 +412,7 @@ def interpretar_goinfra(html):
                 "ano": int(num_ano.group(2)) if num_ano else None,
                 "abertura": enc, "encerramento": enc, "valor": val,
                 "link_pncp": "", "link_origem": href or GOINFRA_URLS[0],
-                "fonte": "site da GOINFRA (SGL)",
+                "fonte": "site da GOINFRA (SGL)", "_casar": r"goinfra|goiana de infra",
             })
     return itens
 
@@ -441,6 +441,135 @@ def coletar_goinfra():
         return itens
     except Exception as e:  # noqa: BLE001 - nunca derrubar a coleta do PNCP por causa de um site
         print("GOINFRA (site proprio): nao foi possivel ler (%s). A coleta segue so com o PNCP." % e)
+        return None
+
+
+# ------------------------------------------------------------------- DER-MG (site proprio)
+# Pagina "Concorrencias <ano>": uma tabela (edital, data de publicacao, descricao, situacao).
+# A data da sessao e o valor orcado ficam na pagina de cada edital; so abrimos as que estao abertas.
+
+DERMG_BASE = "https://www.der.mg.gov.br/"
+DERMG_ORGAO = "DEPARTAMENTO DE EDIFICACOES E ESTRADAS DE RODAGEM DE MINAS GERAIS - DER-MG"
+DERMG_MAX_DETALHES = 60
+RX_DERMG_ENCERRADA = re.compile(r"homologa|extrato de contrato|revoga|deserta|fracassad|anulad|cancelad|encerrad")
+
+
+def _texto_da_pagina(html):
+    class _T(HTMLParser):
+        def __init__(self):
+            super().__init__(convert_charrefs=True)
+            self.partes, self._ignorar = [], 0
+
+        def handle_starttag(self, tag, attrs):
+            if tag in ("script", "style"):
+                self._ignorar += 1
+            elif tag in ("br", "p", "div", "tr", "li", "h1", "h2", "h3", "h4", "td", "th"):
+                self.partes.append(" ")
+
+        def handle_endtag(self, tag):
+            if tag in ("script", "style") and self._ignorar:
+                self._ignorar -= 1
+
+        def handle_data(self, d):
+            if not self._ignorar:
+                self.partes.append(d)
+    t = _T()
+    t.feed(html)
+    return re.sub(r"\s+", " ", " ".join(t.partes)).strip()
+
+
+def interpretar_dermg_lista(html):
+    p = _Tabelas()
+    p.feed(html)
+    saida = []
+    for tab in p.tabelas:
+        for l in tab["linhas"]:
+            if len(l) < 3:
+                continue
+            ed = l[0]
+            m = re.search(r"(\d{5,8})\s+(\d{1,6})\s*/\s*(\d{4})", ed["texto"])
+            if not m or not ed["href"]:
+                continue
+            saida.append({
+                "numero_completo": "%s %s/%s" % (m.group(1), m.group(2), m.group(3)),
+                "numero": m.group(2), "ano": int(m.group(3)),
+                "descricao": l[2]["texto"] if len(l) > 2 else "",
+                "situacao": l[3]["texto"] if len(l) > 3 else "",
+                "href": urllib.parse.urljoin(DERMG_BASE, ed["href"]),
+            })
+    return saida
+
+
+def interpretar_dermg_detalhe(html):
+    t = _texto_da_pagina(html)
+    det = {}
+    m = re.search(r"Modalidade\s*:?\s*(.+?)\s+(?:Objeto|Valor|Data Abertura)\b", t)
+    if m:
+        det["modalidade"] = m.group(1).strip(" :")
+    m = re.search(r"Objeto\s*:?\s*(.+?)\s+(?:Valor Or[cç]ado|Data Abertura|Acessos|Fone|E-mail)\b", t)
+    if m:
+        det["objeto"] = m.group(1).strip(" :")
+    m = re.search(r"Valor Or[cç]ado\s*:?\s*R\$\s*([\d.]+,\d{2})", t)
+    if m:
+        det["valor"] = float(m.group(1).replace(".", "").replace(",", "."))
+    m = re.search(r"Data Abertura\s*:?\s*(\d{2})/(\d{2})/(\d{4})(?:\s*(?:[aàá]s)?\s*(\d{1,2})[:h](\d{2}))?", t)
+    if m:
+        det["encerramento"] = "%s-%s-%sT%02d:%s:00" % (m.group(3), m.group(2), m.group(1), int(m.group(4) or 0), m.group(5) or "00")
+    return det
+
+
+def _ler_dermg(url):
+    mock = os.environ.get("RADAR_MOCK_DERMG")      # pasta de testes: lista.html e det-<id>.html
+    if mock:
+        m = re.search(r"/(\d+)-edital", url)
+        nome = ("det-%s.html" % m.group(1)) if m else "lista.html"
+        with open(os.path.join(mock, nome), "r", encoding="utf-8") as f:
+            return f.read()
+    return _ler_pagina(url)
+
+
+def coletar_dermg():
+    """Concorrencias abertas do DER-MG, ou None se o site nao respondeu."""
+    try:
+        inicio = time.time()
+        itens, ano = [], agora().year
+        lista = []
+        for a in (ano, ano + 1):
+            try:
+                lista += interpretar_dermg_lista(_ler_dermg(DERMG_BASE + "transparencia/licitacoes/concorrencias-%d" % a))
+            except Exception as e:  # noqa: BLE001 - a pagina do ano seguinte pode nao existir ainda
+                if a == ano:
+                    raise
+        abertas = [r for r in lista if not RX_DERMG_ENCERRADA.search(sem_acento(r["situacao"]))]
+        print("DER-MG (site proprio): %d edital(is) na pagina, %d sem homologacao/contrato." % (len(lista), len(abertas)))
+        for r in abertas[:DERMG_MAX_DETALHES]:
+            if time.time() - inicio > 600:
+                break
+            det = {}
+            try:
+                det = interpretar_dermg_detalhe(_ler_dermg(r["href"]))
+            except Exception as e:  # noqa: BLE001
+                print("  aviso: nao abri %s (%s)" % (r["numero_completo"], e))
+            enc = det.get("encerramento")
+            if isinstance(enc, str) and enc < iso(agora() - timedelta(days=1)):
+                continue        # sessao ja passou: nao esta mais aberta para propostas
+            itens.append({
+                "id": "dermg-" + re.sub(r"\W+", "", r["numero_completo"]),
+                "orgao": DERMG_ORGAO, "unidade": "", "uf": "MG", "municipio": "",
+                "objeto": det.get("objeto") or r["descricao"],
+                "modalidade": det.get("modalidade") or "Concorrência",
+                "situacao": r["situacao"][:80], "numero": r["numero"].lstrip("0") or r["numero"], "ano": r["ano"],
+                "abertura": enc, "encerramento": enc, "valor": det.get("valor"),
+                "link_pncp": "", "link_origem": r["href"],
+                "fonte": "site do DER-MG", "_casar": r"estradas de rodagem de minas|edificacoes e estradas",
+            })
+            time.sleep(0.8)
+        print("DER-MG (site proprio): %d licitacao(oes) aberta(s) lida(s)." % len(itens))
+        if abertas and not itens:
+            print("  aviso: havia editais sem homologacao, mas nenhum foi aproveitado (datas passadas ou formato novo).")
+        return itens
+    except Exception as e:  # noqa: BLE001 - nunca derrubar a coleta do PNCP por causa de um site
+        print("DER-MG (site proprio): nao foi possivel ler (%s). A coleta segue so com o PNCP." % e)
         return None
 
 
@@ -502,12 +631,13 @@ def coletar():
     erros = ["%s/%s: %s" % f for f in falhas]
 
     # Fontes que nao estao no PNCP (sites proprios dos orgaos)
-    extras = coletar_goinfra() or []
-    do_pncp = {(re.sub(r"\D", "", str(r["numero"]).split("/")[0]).lstrip("0"), r["ano"]) for r in coletados.values()
-               if r["uf"] == "GO" and re.search(r"goinfra|goiana de infra", sem_acento(r["orgao"]))}
+    extras = (coletar_goinfra() or []) + (coletar_dermg() or [])
     for rec in extras:
+        casar = rec.pop("_casar", "")
         num = re.sub(r"\D", "", str(rec["numero"]).split(" ")[0]).lstrip("0")
-        if (num, rec["ano"]) in do_pncp:
+        if casar and any((re.sub(r"\D", "", str(r["numero"]).split("/")[0]).lstrip("0"), r["ano"]) == (num, rec["ano"])
+                         and r["uf"] == rec["uf"] and re.search(casar, sem_acento(r["orgao"]))
+                         for r in coletados.values() if not str(r["id"]).startswith(("goinfra-", "dermg-"))):
             continue    # a mesma licitacao ja veio do PNCP
         classificar(rec)
         if rec["relevante"] or rec["rodoviario"]:
