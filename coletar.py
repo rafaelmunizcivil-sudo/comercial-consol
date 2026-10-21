@@ -84,7 +84,7 @@ MINIMO_DE_SUCESSO = 0.0    # guarda o resultado parcial (a lista anterior nao e 
 
 API = "https://pncp.gov.br/api/consulta/v1/contratacoes/proposta"
 RX_ORGAO_RODOVIARIO = re.compile(
-    r"\b(der|deer|dnit|daer|derba|goinfra|agesul|ageto|sinfra|seinfra|sie|deinfra|dertins"
+    r"\b(der|deer|dnit|daer|derba|goinfra|agesul|ageto|sinfra|seinfra|sie|deinfra|dertins|seosp"
     r"|departamento de estradas|departamento nacional de infraestrutura|"
     r"infraestrutura|transportes|rodagem)\b"
 )
@@ -631,6 +631,155 @@ def coletar_derpr():
         return None
 
 
+# ------------------------------------------------------------------- DER-RO / SEOSP (portal da SUPEL)
+# As licitacoes de Rondonia ficam no portal da SUPEL (todos os orgaos juntos). Lemos as primeiras paginas
+# da lista (mais novas primeiro), abrimos a pagina de cada edital de obra/servico e ficamos com as abertas.
+
+RO_LISTA = "https://rondonia.ro.gov.br/supel/licitacoes/"
+RO_PAGINAS = 30
+RO_MAX_DETALHES = 200
+RO_TEMPO_MAX = 420
+RX_RO_IGNORAR = re.compile(r"dispensa|chamamento|inexigibilidade|leilao|consulta publica|contratacao direta|credenciamento")
+RX_RO_ENCERRADA = re.compile(r"deserta|revogad|anulad|homologad|fracassad|cancelad|encerrad|suspens")
+RO_ROTULOS = ["Unidade Administrativa", "Modalidade", "Nº Licitação", "Objeto", "Data da Abertura", "Horário da Abertura",
+              "Valor Estimado", "Situação", "Fase Processual", "Dotação Orçamentária", "Arquivo", "Endereço Eletrônico"]
+
+
+class _Ancoras(HTMLParser):
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.achados, self._href, self._txt = [], None, []
+
+    def handle_starttag(self, tag, attrs):
+        if tag == "a":
+            self._href, self._txt = dict(attrs).get("href") or "", []
+
+    def handle_data(self, d):
+        if self._href is not None:
+            self._txt.append(d)
+
+    def handle_endtag(self, tag):
+        if tag == "a" and self._href is not None:
+            self.achados.append((self._href, re.sub(r"\s+", " ", "".join(self._txt)).strip()))
+            self._href = None
+
+
+def interpretar_ro_lista(html):
+    p = _Ancoras()
+    p.feed(html)
+    saida, vistos = [], set()
+    for href, txt in p.achados:
+        idm = re.search(r"/licitacao/(\d+)/?|post_type=licitacao&(?:amp;)?p=(\d+)", href)
+        m = re.match(r"(.+?)\s*[-–]\s*(\d+)\s*/\s*(\d{4})\s*$", txt)
+        if not idm or not m:
+            continue
+        pid = idm.group(1) or idm.group(2)
+        if pid in vistos:
+            continue
+        vistos.add(pid)
+        saida.append({"pid": pid, "modalidade": m.group(1).strip(), "numero": m.group(2), "ano": int(m.group(3)),
+                      "href": "https://rondonia.ro.gov.br/licitacao/%s/" % pid})
+    return saida
+
+
+def interpretar_ro_detalhe(html):
+    t = _texto_da_pagina(html)
+    pos = []
+    for r in RO_ROTULOS:
+        m = re.search(re.escape(r) + r"\s*(?:\([^)]*\))?\s*:?", t)
+        if m:
+            pos.append((m.start(), m.end(), r))
+    pos.sort()
+    campos = {}
+    for i, (ini, fim, r) in enumerate(pos):
+        fim_valor = pos[i + 1][0] if i + 1 < len(pos) else len(t)
+        campos.setdefault(r, t[fim:fim_valor].strip(" :-"))
+    det = {}
+    if campos.get("Unidade Administrativa"):
+        det["unidade"] = campos["Unidade Administrativa"][:90]
+    if campos.get("Dotação Orçamentária"):
+        det["dotacao"] = campos["Dotação Orçamentária"][:200]
+    if campos.get("Objeto"):
+        det["objeto"] = campos["Objeto"][:900]
+    if campos.get("Situação"):
+        det["situacao"] = campos["Situação"][:60]
+    m = re.search(r"(\d{2})/(\d{2})/(\d{4})", campos.get("Data da Abertura", ""))
+    if m:
+        h = re.search(r"(\d{1,2})[:h](\d{2})", campos.get("Horário da Abertura", ""))
+        det["encerramento"] = "%s-%s-%sT%02d:%s:00" % (m.group(3), m.group(2), m.group(1), int(h.group(1)) if h else 0, h.group(2) if h else "00")
+    m = re.search(r"([\d.]+,\d{2})", campos.get("Valor Estimado", ""))
+    if m:
+        det["valor"] = float(m.group(1).replace(".", "").replace(",", "."))
+    return det
+
+
+def _ler_ro(url):
+    mock = os.environ.get("RADAR_MOCK_RO")        # pasta de testes: lista-<n>.html e det-<id>.html
+    if mock:
+        m = re.search(r"/pg/(\d+)", url)
+        d = re.search(r"/licitacao/(\d+)", url)
+        nome = ("det-%s.html" % d.group(1)) if d else ("lista-%s.html" % (m.group(1) if m else "1"))
+        with open(os.path.join(mock, nome), "r", encoding="utf-8") as f:
+            return f.read()
+    return _ler_pagina(url)
+
+
+def coletar_ro():
+    """Licitacoes abertas de obras/servicos da SUPEL-RO (DER e SEOSP), ou None se o portal nao respondeu."""
+    try:
+        inicio = time.time()
+        lista = []
+        for n in range(1, RO_PAGINAS + 1):
+            try:
+                lista += interpretar_ro_lista(_ler_ro(RO_LISTA if n == 1 else RO_LISTA + "pg/%d/" % n))
+            except Exception as e:  # noqa: BLE001
+                if n == 1:
+                    raise
+                print("  aviso: pagina %d da SUPEL nao abriu (%s); seguindo com as anteriores." % (n, e))
+                break
+            time.sleep(0.6)
+        candidatas = [r for r in lista if not RX_RO_IGNORAR.search(sem_acento(r["modalidade"]))]
+        print("SUPEL-RO: %d licitacao(oes) lida(s) em %d pagina(s); %d de modalidade que interessa." % (len(lista), RO_PAGINAS, len(candidatas)))
+        itens = []
+        for r in candidatas[:RO_MAX_DETALHES]:
+            if time.time() - inicio > RO_TEMPO_MAX:
+                print("  aviso: tempo da SUPEL esgotado; o resto fica para a proxima coleta.")
+                break
+            try:
+                det = interpretar_ro_detalhe(_ler_ro(r["href"]))
+            except Exception as e:  # noqa: BLE001
+                print("  aviso: nao abri %s (%s)" % (r["href"], e))
+                continue
+            finally:
+                time.sleep(0.6)
+            enc = det.get("encerramento")
+            if RX_RO_ENCERRADA.search(sem_acento(det.get("situacao", ""))):
+                continue
+            if isinstance(enc, str) and enc < iso(agora() - timedelta(days=1)):
+                continue
+            unidade = det.get("unidade") or ""
+            if not re.search(r"\b(der|seosp)\b", sem_acento(unidade + " " + det.get("dotacao", ""))):
+                continue        # so DER e SEOSP (obras e servicos publicos); o resto da SUPEL nao e do nosso setor
+            nome_unid = "DER-RO" if re.search(r"\bder\b", sem_acento(unidade)) else "SEOSP-RO"
+            orgao = {"DER-RO": "DEPARTAMENTO DE ESTRADAS DE RODAGEM DE RONDONIA - DER-RO",
+                     "SEOSP-RO": "SECRETARIA DE ESTADO DE OBRAS E SERVICOS PUBLICOS DE RONDONIA - SEOSP"}[nome_unid]
+            objeto = det.get("objeto") or "%s %s/%s (%s)" % (r["modalidade"], r["numero"], r["ano"], nome_unid)
+            itens.append({
+                "id": "ro-%s" % r["pid"],
+                "orgao": orgao, "unidade": unidade, "uf": "RO", "municipio": "",
+                "objeto": objeto, "modalidade": r["modalidade"],
+                "situacao": det.get("situacao") or "Aberta", "numero": r["numero"], "ano": r["ano"],
+                "abertura": enc, "encerramento": enc, "valor": det.get("valor"),
+                "link_pncp": "", "link_origem": r["href"],
+                "fonte": "portal da SUPEL-RO", "_casar": r"rondonia|estradas de rodagem|\bder\b",
+            })
+        print("SUPEL-RO: %d licitacao(oes) aberta(s) do DER/SEOSP." % len(itens))
+        return itens
+    except Exception as e:  # noqa: BLE001 - nunca derrubar a coleta do PNCP por causa de um site
+        print("SUPEL-RO: nao foi possivel ler (%s). A coleta segue sem ela." % e)
+        return None
+
+
 # ------------------------------------------------------------------- modos
 
 RX_SERVICOS, RX_CONTEXTOS, RX_EXCLUIR = montar_regex(SERVICOS), montar_regex(CONTEXTOS), montar_regex(PALAVRAS_EXCLUIR)
@@ -690,13 +839,13 @@ def coletar():
 
     # Fontes que nao estao no PNCP (sites proprios dos orgaos)
     lista_derpr = coletar_derpr()
-    extras = (coletar_goinfra() or []) + (coletar_dermg() or []) + (lista_derpr or [])
+    extras = (coletar_goinfra() or []) + (coletar_dermg() or []) + (lista_derpr or []) + (coletar_ro() or [])
     for rec in extras:
         casar = rec.pop("_casar", "")
         num = re.sub(r"\D", "", str(rec["numero"]).split(" ")[0]).lstrip("0")
         if casar and any((re.sub(r"\D", "", str(r["numero"]).split("/")[0]).lstrip("0"), r["ano"]) == (num, rec["ano"])
                          and r["uf"] == rec["uf"] and re.search(casar, sem_acento(r["orgao"]))
-                         for r in coletados.values() if not str(r["id"]).startswith(("goinfra-", "dermg-", "derpr-"))):
+                         for r in coletados.values() if not str(r["id"]).startswith(("goinfra-", "dermg-", "derpr-", "ro-"))):
             continue    # a mesma licitacao ja veio do PNCP
         classificar(rec)
         if rec["relevante"] or rec["rodoviario"]:
