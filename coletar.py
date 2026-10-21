@@ -789,12 +789,19 @@ def coletar_ro():
 RX_SERVICOS, RX_CONTEXTOS, RX_EXCLUIR = montar_regex(SERVICOS), montar_regex(CONTEXTOS), montar_regex(PALAVRAS_EXCLUIR)
 
 
+RX_URBANO = re.compile(r"\bruas?\b|\bavenidas?\b|\bav\.|calcament|\bcalcadas?\b|vias? publicas?|\bareas? urbanas?|urbaniza|vias? urbanas?|paralelepipedo"
+                       r"|bloquete|\bbairros?\b|\bpracas?\b|loteamento|meio[- ]?fio|sarjeta|mobilidade urbana|drenagem urbana|perimetro urbano"
+                       r"|\bviela|\btravessas?\b|\blogradouros?\b")
+RX_RODOVIA_FORTE = re.compile(r"rodovi|\bbr[- ]?\d{2,3}\b|\b(?:mg|sp|pr|go|ba|rj|es|sc|rs|mt|ms|pe|ce|ma|pa|pi|rn|pb|se|al|to|ro|ac|am|ap|rr|df|lmg|amg)[- ]?\d{2,3}\b"
+                              r"|travessia urbana|contorno rodoviario|estradas? de rodagem")
+
+
 def classificar(rec):
     """Define rec['rodoviario'] e rec['relevante'] pelas regras acima."""
     orgao = sem_acento(rec.get("orgao"))
     objeto = sem_acento(rec.get("objeto"))
     rec["rodoviario"] = bool(RX_ORGAO_RODOVIARIO.search(orgao))
-    barrado = bool(RX_EXCLUIR.search(objeto))
+    barrado = bool(RX_EXCLUIR.search(objeto)) or (bool(RX_URBANO.search(objeto)) and not RX_RODOVIA_FORTE.search(objeto))
     servico = bool(RX_SERVICOS.search(objeto))
     contexto = bool(RX_CONTEXTOS.search(objeto)) or bool(RX_RODOVIA.search(objeto))
     rec["relevante"] = (rec["rodoviario"] and not barrado) or (servico and contexto and not barrado)
