@@ -74,6 +74,7 @@ PALAVRAS_EXCLUIR = [
     "arquitet", "enfermaria", "centro cirurgico", "ambulatori", "saude", "climatizacao", "unidade basica",
     "universidade", "campus", "museu", "teatro", "ginasio", "quadra poliesportiva", "estadio", "cemiterio",
     "predio", "edificio", "paisagismo",
+    "caes e gatos", "coleira", "animais domesticos", "zoonose",
 ]
 
 DIAS_A_FRENTE = 180        # consulta propostas que encerram ate daqui a N dias
@@ -87,10 +88,19 @@ PAGINAS_MAXIMO = 200
 MINIMO_DE_SUCESSO = 0.0    # guarda o resultado parcial (a lista anterior nao e apagada); so falha se nada deu certo
 
 API = "https://pncp.gov.br/api/consulta/v1/contratacoes/proposta"
+# Orgaos que so cuidam de rodovia: tudo deles (que nao seja barrado) interessa.
 RX_ORGAO_RODOVIARIO = re.compile(
-    r"\b(der|deer|dnit|daer|derba|goinfra|agesul|ageto|sinfra|seinfra|sie|deinfra|dertins|seosp"
+    r"\b(der|deer|dnit|daer|derba|goinfra|agesul|ageto|deinfra|dertins"
     r"|departamento de estradas|departamento nacional de infraestrutura|"
-    r"infraestrutura|transportes|rodagem)\b"
+    r"rodagem|infra-estrutura rodoviaria|edificacoes e de rodovias)\b"
+)
+# Secretarias e orgaos genericos (infraestrutura, transportes, obras, meio ambiente...): so interessam se o TEXTO for de rodovia.
+RX_ORGAO_GENERICO = re.compile(r"\b(sinfra|seinfra|sie|infraestrutura|transportes|seosp)\b")
+# O objeto precisa falar de rodovia / obra rodoviaria (nao basta "estrada", "drenagem" ou "viario", que servem para ruas e vicinais)
+RX_TEXTO_RODOVIA = re.compile(
+    r"rodovi|\bbr[- ]?\d{2,3}\b|\b(?:mg|sp|pr|go|ba|rj|es|sc|rs|mt|ms|pe|ce|ma|pa|pi|rn|pb|se|al|to|ro|ac|am|ap|rr|df|lmg|amg)[- ]?\d{2,3}\b"
+    r"|estradas? de rodagem|pavimenta|restaura|duplica|\bponte|viaduto|obras? de arte|\boae\b|faixa de dominio"
+    r"|sinalizacao (?:viaria|rodoviaria)|malha vi|acostamento|terraplen|\btrechos?\b|\bkm\b|\btrevo|interseca|contorno rodoviario|talude|encosta"
 )
 
 ARQUIVO = os.environ.get("RADAR_SAIDA", "licitacoes.json")
@@ -803,8 +813,8 @@ def classificar(rec):
     rec["rodoviario"] = bool(RX_ORGAO_RODOVIARIO.search(orgao))
     barrado = bool(RX_EXCLUIR.search(objeto)) or (bool(RX_URBANO.search(objeto)) and not RX_RODOVIA_FORTE.search(objeto))
     servico = bool(RX_SERVICOS.search(objeto))
-    contexto = bool(RX_CONTEXTOS.search(objeto)) or bool(RX_RODOVIA.search(objeto))
-    rec["relevante"] = (rec["rodoviario"] and not barrado) or (servico and contexto and not barrado)
+    texto_rodovia = bool(RX_TEXTO_RODOVIA.search(objeto))
+    rec["relevante"] = (not barrado) and (rec["rodoviario"] or (servico and texto_rodovia))
     return rec
 
 

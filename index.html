@@ -361,6 +361,13 @@ const RX_RODOVIA_FORTE = /rodovi|\bbr[- ]?\d{2,3}\b|\b(mg|sp|pr|go|ba|rj|es|sc|r
 const RX_RODOVIA_CTX = /rodovi|estrada|\b(br|mg|sp|pr|go|ba|rj|es|sc|rs|mt|ms|pe|ce|ma|pa|pi|rn|pb|se|al|to|ro|ac|am|ap|rr|df|lmg|amg)[- ]?\d{2,3}\b|trecho|pavimenta|restaura|duplica|ponte|viaduto|obras? de arte|contorno|acesso rodoviario|\bkm\b|interseca|trevo|faixa de dominio|talude|encosta/;
 const RX_EDIFICACAO = /arquitet|edifica|hospital|saude|enfermaria|ambulatori|climatizacao|\bpredios?\b|escola|universidade|campus/;
 const RX_EXECUCAO = /execucao\s+(d[aeo]s?\s+)?(obras?|servicos?)|e\s+execucao|execucao\s+e\s|obras?\s+e\s+servicos|contratacao\s+integrada|semi-?integrada/;
+const RX_ORGAO_ROD = /\b(der|deer|dnit|daer|derba|goinfra|agesul|ageto|deinfra|dertins)\b|departamento de estradas|departamento nacional de infraestrutura|rodagem|infra-estrutura rodoviaria|edificacoes e de rodovias/;
+const RX_TEXTO_ROD = /rodovi|\bbr[- ]?\d{2,3}\b|\b(mg|sp|pr|go|ba|rj|es|sc|rs|mt|ms|pe|ce|ma|pa|pi|rn|pb|se|al|to|ro|ac|am|ap|rr|df|lmg|amg)[- ]?\d{2,3}\b|estradas? de rodagem|pavimenta|restaura|duplica|\bponte|viaduto|obras? de arte|\boae\b|faixa de dominio|sinalizacao (viaria|rodoviaria)|malha vi|acostamento|terraplen|\btrechos?\b|\bkm\b|\btrevo|interseca|contorno rodoviario|talude|encosta/;
+// Só entra o que é de rodovia: órgão só de rodovia (DER, DNIT...) ou texto que fala de rodovia. Secretaria de "Infraestrutura" sozinha não basta.
+function foraDoEscopo(it) {
+  if (it._fora === undefined) it._fora = !(RX_ORGAO_ROD.test(norm(it.orgao)) || RX_TEXTO_ROD.test(norm(it.objeto)));
+  return it._fora;
+}
 function ehUrbano(it) {
   if (it._urb === undefined) { const t = norm(it.objeto); it._urb = RX_URBANO.test(t) && !RX_RODOVIA_FORTE.test(t); }
   return it._urb;
@@ -368,11 +375,11 @@ function ehUrbano(it) {
 
 // Os três serviços da CONSOL: o tipo vem de palavras do objeto da licitação (e sempre precisa ser de rodovia).
 const SERVICOS = [
-  { id: "monitoramento", nome: "Monitoramento", rx: { test: (t, it) => /monitor|instrumenta|auscult|inspec/.test(t) && (RX_RODOVIA_CTX.test(t) || it.rodoviario) && !RX_EDIFICACAO.test(t) && !RX_URBANO.test(t) } },
+  { id: "monitoramento", nome: "Monitoramento", rx: { test: (t, it) => /monitor|instrumenta|auscult|inspec/.test(t) && RX_TEXTO_ROD.test(t) && !RX_EDIFICACAO.test(t) && !RX_URBANO.test(t) } },
   // Projetos: só projeto básico / executivo (ou elaboração de projeto) de RODOVIA, sem execução de obra/serviço.
   { id: "projetos", nome: "Projetos", rx: { test: t => /projetos?\s+(basicos?|executivos?)|basico\s+e\s+executivo|elaboracao\s+de\s+projetos?|anteprojeto/.test(t)
       && RX_RODOVIA_CTX.test(t) && !RX_EXECUCAO.test(t) && !RX_URBANO.test(t) && !RX_EDIFICACAO.test(t) } },
-  { id: "supervisao", nome: "Supervisão", rx: { test: (t, it) => /supervis|fiscaliza|gerenciament|gerenciador|acompanhamento (tecnico|de obra)|apoio tecnico/.test(t) && (RX_RODOVIA_CTX.test(t) || it.rodoviario) && !RX_EDIFICACAO.test(t) && !RX_URBANO.test(t) } },
+  { id: "supervisao", nome: "Supervisão", rx: { test: (t, it) => /supervis|fiscaliza|gerenciament|gerenciador|acompanhamento (tecnico|de obra)|apoio tecnico/.test(t) && RX_TEXTO_ROD.test(t) && !RX_EDIFICACAO.test(t) && !RX_URBANO.test(t) } },
 ];
 function servicosDe(it) {
   if (!it._srv) { const t = norm(it.objeto); it._srv = SERVICOS.filter(x => x.rx.test(t, it)).map(x => x.id); }
@@ -413,6 +420,7 @@ function filtrar(ignorarDia, ignorarOrgao, ignorarUf, ignorarServico) {
   return DADOS.itens.filter(it => {
     if (F.relevantes && !it.relevante) return false;
     if (ehUrbano(it)) return false;
+    if (foraDoEscopo(it)) return false;
     if (!ignorarOrgao && F.orgao && orgaoDe(it) !== F.orgao) return false;
     if (F.rodoviarios && !it.rodoviario) return false;
     if (!ignorarUf && F.uf && it.uf !== F.uf) return false;
