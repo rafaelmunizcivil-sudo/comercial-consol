@@ -824,6 +824,24 @@ RX_CONSULTORIA = re.compile(
 )
 
 
+# Fora do escopo (nao e rodovia / nao e consultoria de engenharia rodoviaria), mesmo vindo de DER ou DNIT.
+RX_FORA_ESCOPO = re.compile(r"incendio|bombeiro|\bppci\b|indigena|quilombola")
+# Hidrovia, porto, ferrovia, aeroporto: fora, a menos que o texto fale de rodovia (ex.: apoio a fiscalizacao de obras rodoviarias e ferroviarias)
+RX_FORA_MODAL = re.compile(r"hidrovi|portuari|ferrovi|aeroport|aeroviari|dragagem|eclusa|navegacao|metroviari|\bvlt\b")
+# Estudo/licenca ambiental isolado nao interessa; so entra se tiver projeto, supervisao ou gerenciamento junto.
+RX_AMBIENTAL = re.compile(r"ambienta|\bpba\b|\beia\b|\brima\b|passivo|supressao vegetal|fauna|flora|licenciamento|compensacao")
+RX_NUCLEO = re.compile(r"projetos? (?:basico|executivo|de engenharia|geometrico)|supervis.{0,40}obra|fiscaliza.{0,40}obra|contratacao (?:semi-?)?integrada")
+# Para orgaos so de rodovia, basta o objeto falar de obra rodoviaria (nao precisa escrever a palavra "rodovia")
+RX_CONTEXTO_VIARIO = re.compile(
+    r"pavimenta|restaura|duplica|\bponte|viaduto|obras? de arte|\btrechos?\b|\bkm\b|travessia|contorno|interseca|\btrevo|talude|encosta"
+    r"|conservacao|manutencao rodoviari|acesso rodoviari|implantacao e pavimenta|terraplen|drenagem|sinalizacao|qualidade das obras|obras rodoviari"
+)
+
+
+# "conforme projeto basico" e so referencia a um projeto que ja existe (a obra e de execucao): nao conta como consultoria
+RX_REFERENCIA_PROJETO = re.compile(r"(?:conforme|de acordo com|segundo|constante d[eo]s?|previsto n[oa]s?|baseado n[oa]s?|nos termos d[oa]s?)\s+(?:o |a |os |as )?projetos?[^.;,]{0,40}")
+
+
 def classificar(rec):
     """Define rec['rodoviario'] e rec['relevante'] pelas regras acima."""
     orgao = sem_acento(rec.get("orgao"))
@@ -832,8 +850,12 @@ def classificar(rec):
     barrado = bool(RX_EXCLUIR.search(objeto)) or (bool(RX_URBANO.search(objeto)) and not RX_RODOVIA_FORTE.search(objeto))
     servico = bool(RX_SERVICOS.search(objeto))
     texto_rodovia = bool(RX_TEXTO_RODOVIA.search(objeto))
-    consultoria = bool(RX_CONSULTORIA.search(objeto))
-    rec["relevante"] = (not barrado) and consultoria and (rec["rodoviario"] or texto_rodovia)
+    consultoria = bool(RX_CONSULTORIA.search(RX_REFERENCIA_PROJETO.sub(' ', objeto)))
+    fora = (bool(RX_FORA_ESCOPO.search(objeto))
+            or (bool(RX_FORA_MODAL.search(objeto)) and not RX_RODOVIA_FORTE.search(objeto))
+            or (bool(RX_AMBIENTAL.search(objeto)) and not RX_NUCLEO.search(objeto)))
+    de_rodovia = texto_rodovia or (rec["rodoviario"] and bool(RX_CONTEXTO_VIARIO.search(objeto)))
+    rec["relevante"] = (not barrado) and (not fora) and consultoria and de_rodovia
     return rec
 
 
