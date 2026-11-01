@@ -362,8 +362,19 @@ const RX_TEXTO_ROD = /rodovias?\b|(obras?|infraestrutura|malha|conservacao|pavim
 // Só entra o que é de rodovia: órgão só de rodovia (DER, DNIT...) ou texto que fala de rodovia. Secretaria de "Infraestrutura" sozinha não basta.
 // O Radar é de CONSULTORIA: projetos, estudos, supervisão, monitoramento (e contratação integrada, que leva projeto). Obra pura de execução fica de fora.
 const RX_CONSULT = /elaboracao d[eoa]s? (?:\w+ )?(?:projetos?|estudos?|anteprojeto)|elaboracao e desenvolvimento|elaborar (?:o )?(?:os )?projetos?|projetos? (?:basico|executivo|de engenharia|geometrico|de restauracao|de pavimento)|projetos? basico|contratacao (?:semi-?)?integrada|anteprojeto|supervis|fiscaliza[cr]|gerenciament|gerenciador|consultoria|\bestudos? (?:de |tecnicos?|ambientais?|geotecnic|hidrolog|viabilidade|trafego|preliminar|complementar)|estudos e projetos|topograf|geotecn|sondagem|aerolevantamento|levantamento (?:topografico|cadastral|aerofotogrametrico|planialtimetrico|de campo)|monitoramento|instrumenta[cr]|auscultacao|inspe[cr][ca]o (?:de|das|dos|da) (?:obras?|pontes?|oae|pavimento|rodovia|estruturas?)|apoio (?:tecnico )?(?:a|ao|na|no) (?:fiscaliza|gerenciament|supervis)|assessoria tecnica|georreferenc|\bbim\b|licenciamento ambiental|desapropria|avaliacao tecnica independente|controle tecnologico|verificacao independente|auditoria tecnica|controle de qualidade das obras|ensaios (?:de|e) (?:laboratorio|campo)/;
+const RX_REFERENCIA_PROJETO = new RegExp("(?:conforme|de acordo com|segundo|constante d[eo]s?|previsto n[oa]s?|baseado n[oa]s?|nos termos d[oa]s?)\\s+(?:o |a |os |as )?projetos?[^.;,]{0,40}", 'g');
+const RX_FORA_ESCOPO = /incendio|bombeiro|\bppci\b|indigena|quilombola/;
+const RX_FORA_MODAL = /hidrovi|portuari|ferrovi|aeroport|aeroviari|dragagem|eclusa|navegacao|metroviari|\bvlt\b/;
+const RX_AMBIENTAL = /ambienta|\bpba\b|\beia\b|\brima\b|passivo|supressao vegetal|fauna|flora|licenciamento|compensacao/;
+const RX_NUCLEO = /projetos? (?:basico|executivo|de engenharia|geometrico)|supervis.{0,40}obra|fiscaliza.{0,40}obra|contratacao (?:semi-?)?integrada/;
+const RX_CONTEXTO_VIARIO = /pavimenta|restaura|duplica|\bponte|viaduto|obras? de arte|\btrechos?\b|\bkm\b|travessia|contorno|interseca|\btrevo|talude|encosta|conservacao|manutencao rodoviari|acesso rodoviari|implantacao e pavimenta|terraplen|drenagem|sinalizacao|qualidade das obras|obras rodoviari/;
 function foraDoEscopo(it) {
-  if (it._fora === undefined) { const t = norm(it.objeto); it._fora = !(RX_ORGAO_ROD.test(norm(it.orgao)) || RX_TEXTO_ROD.test(t)) || !RX_CONSULT.test(t); }
+  if (it._fora === undefined) {
+    const t = norm(it.objeto), orgForte = RX_ORGAO_ROD.test(norm(it.orgao));
+    const deRodovia = RX_TEXTO_ROD.test(t) || (orgForte && RX_CONTEXTO_VIARIO.test(t));
+    const fora = RX_FORA_ESCOPO.test(t) || (RX_FORA_MODAL.test(t) && !RX_RODOVIA_FORTE.test(t)) || (RX_AMBIENTAL.test(t) && !RX_NUCLEO.test(t));
+    it._fora = fora || !deRodovia || !RX_CONSULT.test(t.replace(RX_REFERENCIA_PROJETO, ' '));
+  }
   return it._fora;
 }
 
