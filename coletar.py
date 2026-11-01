@@ -75,6 +75,10 @@ PALAVRAS_EXCLUIR = [
     "universidade", "campus", "museu", "teatro", "ginasio", "quadra poliesportiva", "estadio", "cemiterio",
     "predio", "edificio", "paisagismo",
     "caes e gatos", "coleira", "animais domesticos", "zoonose",
+    # terminais e concessoes de area (nao e rodovia)
+    "terminal rodoviario", "estacao rodoviaria", "rodoviaria municipal", "lanchonete", "sanitario", "banheiro",
+    "corredor de onibus", "brt", "patrimonio historico", "tombad", "solar do", "parque linear",
+    "concessao de uso onerosa", "concessao onerosa", "exploracao comercial", "cantina", "estacionamento rotativo",
 ]
 
 DIAS_A_FRENTE = 180        # consulta propostas que encerram ate daqui a N dias
@@ -98,9 +102,9 @@ RX_ORGAO_RODOVIARIO = re.compile(
 RX_ORGAO_GENERICO = re.compile(r"\b(sinfra|seinfra|sie|infraestrutura|transportes|seosp)\b")
 # O objeto precisa falar de rodovia / obra rodoviaria (nao basta "estrada", "drenagem" ou "viario", que servem para ruas e vicinais)
 RX_TEXTO_RODOVIA = re.compile(
-    r"rodovi|\bbr[- ]?\d{2,3}\b|\b(?:mg|sp|pr|go|ba|rj|es|sc|rs|mt|ms|pe|ce|ma|pa|pi|rn|pb|se|al|to|ro|ac|am|ap|rr|df|lmg|amg)[- ]?\d{2,3}\b"
-    r"|estradas? de rodagem|pavimenta|restaura|duplica|\bponte|viaduto|obras? de arte|\boae\b|faixa de dominio"
-    r"|sinalizacao (?:viaria|rodoviaria)|malha vi|acostamento|terraplen|\btrechos?\b|\bkm\b|\btrevo|interseca|contorno rodoviario|talude|encosta"
+    r"rodovias?\b|(?:obras?|infraestrutura|malha|conservacao|pavimento|sinalizacao) rodoviari[ao]s?"
+    r"|\b(?:br|brs|ers|rsc|rst|mgc|amg|lmg|sc|pr|sp|mg|go|ba|rj|es|rs|mt|ms|pe|ce|ma|pa|pi|rn|pb|se|al|to|ro|ac|am|ap|rr|df)[- ]?\d{2,3}\b"
+    r"|estradas? de rodagem|faixa de dominio|contorno rodoviario|acostamento"
 )
 
 ARQUIVO = os.environ.get("RADAR_SAIDA", "licitacoes.json")
@@ -802,8 +806,22 @@ RX_SERVICOS, RX_CONTEXTOS, RX_EXCLUIR = montar_regex(SERVICOS), montar_regex(CON
 RX_URBANO = re.compile(r"\bruas?\b|\bavenidas?\b|\bav\.|calcament|\bcalcadas?\b|vias? publicas?|\bareas? urbanas?|urbaniza|vias? urbanas?|paralelepipedo"
                        r"|bloquete|\bbairros?\b|\bpracas?\b|loteamento|meio[- ]?fio|sarjeta|mobilidade urbana|drenagem urbana|perimetro urbano"
                        r"|\bviela|\btravessas?\b|\blogradouros?\b")
-RX_RODOVIA_FORTE = re.compile(r"rodovi|\bbr[- ]?\d{2,3}\b|\b(?:mg|sp|pr|go|ba|rj|es|sc|rs|mt|ms|pe|ce|ma|pa|pi|rn|pb|se|al|to|ro|ac|am|ap|rr|df|lmg|amg)[- ]?\d{2,3}\b"
+RX_RODOVIA_FORTE = re.compile(r"rodovias?\b|(?:obras?|infraestrutura|malha|conservacao|pavimento|sinalizacao) rodoviari[ao]s?|\bbr[- ]?\d{2,3}\b|\b(?:mg|sp|pr|go|ba|rj|es|sc|rs|mt|ms|pe|ce|ma|pa|pi|rn|pb|se|al|to|ro|ac|am|ap|rr|df|lmg|amg)[- ]?\d{2,3}\b"
                               r"|travessia urbana|contorno rodoviario|estradas? de rodagem")
+
+
+# Escopo da CONSOL = CONSULTORIA (projetos, estudos, supervisao, monitoramento). Obra pura de execucao nao interessa.
+# Contratacao integrada (projeto + obra no mesmo edital) interessa.
+RX_CONSULTORIA = re.compile(
+    r"elaboracao d[eoa]s? (?:\w+ )?(?:projetos?|estudos?|anteprojeto)|elaboracao e desenvolvimento|elaborar (?:o )?(?:os )?projetos?"
+    r"|projetos? (?:basico|executivo|de engenharia|geometrico|de restauracao|de pavimento)|projetos? basico"
+    r"|contratacao (?:semi-?)?integrada|anteprojeto|supervis|fiscaliza[cr]|gerenciament|gerenciador|consultoria"
+    r"|\bestudos? (?:de |tecnicos?|ambientais?|geotecnic|hidrolog|viabilidade|trafego|preliminar|complementar)|estudos e projetos|topograf|geotecn|sondagem"
+    r"|aerolevantamento|levantamento (?:topografico|cadastral|aerofotogrametrico|planialtimetrico|de campo)"
+    r"|monitoramento|instrumenta[cr]|auscultacao|inspe[cr][ca]o (?:de|das|dos|da) (?:obras?|pontes?|oae|pavimento|rodovia|estruturas?)"
+    r"|apoio (?:tecnico )?(?:a|ao|na|no) (?:fiscaliza|gerenciament|supervis)|assessoria tecnica|georreferenc|\bbim\b|licenciamento ambiental|desapropria"
+    r"|avaliacao tecnica independente|controle tecnologico|verificacao independente|auditoria tecnica|controle de qualidade das obras|ensaios (?:de|e) (?:laboratorio|campo)"
+)
 
 
 def classificar(rec):
@@ -814,7 +832,8 @@ def classificar(rec):
     barrado = bool(RX_EXCLUIR.search(objeto)) or (bool(RX_URBANO.search(objeto)) and not RX_RODOVIA_FORTE.search(objeto))
     servico = bool(RX_SERVICOS.search(objeto))
     texto_rodovia = bool(RX_TEXTO_RODOVIA.search(objeto))
-    rec["relevante"] = (not barrado) and (rec["rodoviario"] or (servico and texto_rodovia))
+    consultoria = bool(RX_CONSULTORIA.search(objeto))
+    rec["relevante"] = (not barrado) and consultoria and (rec["rodoviario"] or texto_rodovia)
     return rec
 
 
